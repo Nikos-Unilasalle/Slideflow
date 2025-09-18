@@ -1,0 +1,33 @@
+{
+  "background": "#fbf7f7",
+  "textColor": "#3d3846",
+  "accentColor": "#91cf00",
+  "boldColor": "#0f7bff",
+  "titleColor": "#813b81",
+  "titleFont": "Bangers, serif",
+  "bodyFont": "Nova Mono, serif",
+  "titleSize": 73,
+  "subtitleSize": 46,
+  "bodySize": 34,
+  "lineHeight": 1.3,
+  "gutter": 24,
+  "speed": 1250,
+  "easing": "expo",
+  "vignette": true,
+  "vignetteStrength": 0.13,
+  "imageFit": "cover",
+  "googleFonts": [
+    "Bangers",
+    "Nova Mono"
+  ],
+  "logoUrl": "presentation/img/logo.png",
+  "logoSize": 170,
+  "logoOpacity": 1,
+  "logoCorner": "tl",
+  "logoMargin": 9,
+  "logoRadius": 11,
+  "logoShadow": true,
+  "imageSide": "left",
+  "showFoldImage": true,
+  "foldImageOpacity": 0
+}

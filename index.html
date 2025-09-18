@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SlideFlow Lite</title>
+  <link rel="stylesheet" href="app/styles.css" />
+  <!-- libs: YAML, Markdown, Sanitizer -->
+  <script src="https://unpkg.com/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div id="hud">
+      <button id="prev" type="button">◀︎</button>
+      <div id="pos">1/1</div>
+      <button id="next" type="button">▶︎</button>
+      <button id="invert-layout-btn" type="button" style="display: none;">↔ Inverser</button>
+      <button id="btn-save" type="button">Sauvegarder la présentation</button>
+      <label class="file-btn small" id="load-theme-btn-label">Charger un thème<input type="file" id="load-theme-input" accept=".json"/></label>
+      <button id="save-theme-btn" type="button">Sauvegarder le thème</button>
+      <button id="export-html-btn" type="button">Télécharger la présentation</button>
+      <button id="openPanelText" type="button">🎨 Textes</button>
+      <button id="openPanelEffects" type="button">✨ Effets</button>
+    </div>
+
+    <div id="slider-controls">
+        <div class="slider-group">
+            <label for="zoom-slider">Zoom</label>
+            <input type="range" id="zoom-slider" min="0.5" max="2.5" step="0.05" value="1">
+        </div>
+        <div class="slider-group">
+            <label for="v-margin-slider">Marge Vert.</label>
+            <input type="range" id="v-margin-slider" min="0" max="300" step="1" value="0">
+        </div>
+        <div class="slider-group">
+            <label for="h-margin-slider">Marge Horiz.</label>
+            <input type="range" id="h-margin-slider" min="0" max="300" step="1" value="0">
+        </div>
+    </div>
+
+    <!-- Text Panel -->
+    <div id="panel-text" class="panel" hidden>
+      <div class="panel-inner">
+        <div class="panel-header">
+          <strong>Thème : Textes & Couleurs</strong>
+          <div class="spacer"></div>
+          <button id="closePanelText" type="button">✕</button>
+        </div>
+
+        <div class="panel-top-grid"> <!-- New grid for top sections -->
+          <div class="panel-section">
+            <div class="section-title">Couleurs</div>
+            <div class="grid-colors">
+              <label>fond <input type="color" id="p_background" value="#ffffff"></label>
+              <label>titre <input type="color" id="p_titleColor" value="#000000"></label>
+              <label>texte <input type="color" id="p_textColor" value="#111827"></label>
+              <label>accent <input type="color" id="p_accentColor" value="#0f7bff"></label>
+              <label>gras <input type="color" id="p_boldColor" value="#ffffff"></label>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-title">Espacement</div>
+            <div class="grid-two">
+              <div class="input-group"><label>Interligne</label> <div class="input-with-value"><input type="range" step="0.01" id="p_lineHeight" min="1" max="2"><span id="p_lineHeight_val"></span></div></div>
+              <div class="input-group"><label>Gouttière (px)</label> <div class="input-with-value"><input type="range" id="p_gutter" min="0" max="96"><span id="p_gutter_val"></span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-title">Typographie</div>
+          <div class="grid-three-cols">
+            <div class="col-type">
+              <div class="section-title">Titre</div>
+              <label>Police (nom Google) <input type="text" id="gf_title_family" placeholder="Playfair Display"></label>
+              <div class="input-group"><label>Taille</label> <div class="input-with-value"><input type="range" id="p_titleSize" min="24" max="160"><span id="p_titleSize_val"></span></div></div>
+            </div>
+            <div class="col-type">
+              <div class="section-title">Sous-titre</div>
+              <div class="input-group"><label>Taille</label> <div class="input-with-value"><input type="range" id="p_subtitleSize" min="12" max="96"><span id="p_subtitleSize_val"></span></div></div>
+            </div>
+            <div class="col-type">
+              <div class="section-title">Corps du texte</div>
+              <label>Police (nom Google) <input type="text" id="gf_body_family" placeholder="Inter"></label>
+              <div class="input-group"><label>Taille</label> <div class="input-with-value"><input type="range" id="p_bodySize" min="10" max="48"><span id="p_bodySize_val"></span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-actions">
+          <div class="spacer"></div>
+          <button class="resetTheme" type="button">Réinitialiser</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Effects Panel -->
+    <div id="panel-effects" class="panel" hidden>
+        <div class="panel-inner">
+          <div class="panel-header">
+            <strong>Thème : Effets Visuels</strong>
+            <div class="spacer"></div>
+            <button id="closePanelEffects" type="button">✕</button>
+          </div>
+  
+          <div class="panel-section">
+            <div class="section-title">Animation & Effets</div>
+            <div class="grid-three">
+              <div class="input-group"><label>Vitesse (ms)</label> <div class="input-with-value"><input type="range" id="p_speed" min="100" max="3000" step="50"><span id="p_speed_val"></span></div></div>
+              <div class="input-group"><label>Vignette opacité</label> <div class="input-with-value"><input type="range" id="p_vignetteStrength" min="0" max="1" step="0.01"></div></div>
+              <div class="input-group"><label>Fold opacité</label> <div class="input-with-value"><input type="range" id="p_foldImageOpacity" min="0" max="1" step="0.01"></div></div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-title">Apparence</div>
+            <div class="grid-two-col-layout"> <!-- Using the new two-column layout -->
+              <div class="col-left">
+                <div class="input-group"><label>Taille (px)</label> <div class="input-with-value"><input type="range" id="p_logoSize" min="24" max="400"><span id="p_logoSize_val"></span></div></div>
+                <div class="input-group"><label>Opacité</label> <div class="input-with-value"><input type="range" id="p_logoOpacity" min="0" max="1" step="0.01"></div></div>
+                <div class="input-group"><label>Arrondi (px)</label> <div class="input-with-value"><input type="range" id="p_logoRadius" min="0" max="200"><span id="p_logoRadius_val"></span></div></div>
+              </div>
+              <div class="col-right">
+                <div class="input-group"><label>Coin</label>
+                  <select id="p_logoCorner">
+                    <option value="tr">Haut droite</option>
+                    <option value="tl">Haut gauche</option>
+                    <option value="br">Bas droite</option>
+                    <option value="bl">Bas gauche</option>
+                  </select>
+                </div>
+                <div class="input-group"><label>Marge (px)</label> <div class="input-with-value"><input type="range" id="p_logoMargin" min="0" max="120"><span id="p_logoMargin_val"></span></div></div>
+                <div class="input-group"><label>Ombre</label> <input type="checkbox" id="p_logoShadow"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-actions">
+            <div class="spacer"></div>
+            <button class="resetTheme" type="button">Réinitialiser</button>
+          </div>
+        </div>
+      </div>
+
+    <!-- logo overlay -->
+    <img id="brandLogo" alt="logo" hidden />
+
+    <!-- vignette overlay -->
+    <div class="vignette" id="vignette"></div>
+    <!-- blackout / whiteout overlays -->
+    <div id="blackout" aria-hidden="true"></div>
+    <div id="whiteout" aria-hidden="true"></div>
+
+    <!-- Stage -->
+    <div id="stage">
+      <div class="pane" id="pane-1">
+        <div class="pane-buffer" id="B1-0"></div>
+        <div class="pane-buffer" id="B1-1"></div>
+      </div>
+      <div class="pane" id="pane-2">
+        <div class="pane-buffer" id="B2-0"></div>
+        <div class="pane-buffer" id="B2-1"></div>
+      </div>
+    </div>
+
+    <img id="foldImage" src="app/assets/fold.png" alt="Fold Image" class="fold-image" />
+  </div>
+
+  <script src="app/app.js"></script>
+</body>
+
+
+
+</html>
