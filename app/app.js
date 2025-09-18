@@ -288,7 +288,7 @@
   function renderSpecialBlocks(element) {
     // Mermaid diagrams
     const mermaidBlocks = element.querySelectorAll('pre code.language-mermaid');
-    if (mermaidBlocks.length === 0) return;
+    if (mermaidBlocks.length === 0) return Promise.resolve();
 
     mermaidBlocks.forEach(block => {
       const container = document.createElement('div');
@@ -298,9 +298,11 @@
     });
 
     // Let mermaid find and render the diagrams
-    mermaid.run({
+    return mermaid.run({
         nodes: element.querySelectorAll('.mermaid')
-    }).catch(e => console.error("Mermaid run error:", e));
+    }).catch(e => {
+      console.error("Mermaid run error:", e);
+    });
   }
 
   function setContentForText(dom, s){
@@ -327,7 +329,7 @@
 
     applyImageZoom(s, dom); // Apply initial image zoom
 
-    renderSpecialBlocks(bodyEl);
+    return renderSpecialBlocks(bodyEl);
   }
 
   function setContentForImage(dom, s){
@@ -760,9 +762,9 @@ function readPanelToConfig(){
           const response = await fetch(url);
           if (!response.ok) throw new Error(`Failed to fetch image: ${url}`);
           const blob = await response.blob();
-          return new Promise((resolve, reject) => {
+          return await new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
+            reader.onload = () => resolve(reader.result);
             reader.onerror = reject;
             reader.readAsDataURL(blob);
           });
@@ -778,69 +780,113 @@ function readPanelToConfig(){
           case 'tr': return `top: ${m}; right: ${m};`;
           case 'br': return `bottom: ${m}; right: ${m};`;
           case 'bl': return `bottom: ${m}; left: ${m};`;
-          case 'tl': default: return `top: ${m}; left: ${m};`;
+          case 'tl':
+          default: return `top: ${m}; left: ${m};`;
         }
       }
 
-      // 1. Convert all slide images and logo to Base64 Data URIs
-      const allImageUrls = slides.map(s => s.image).filter(Boolean);
-      if (cfg.logoUrl) allImageUrls.push(cfg.logoUrl);
-      const uniqueImageUrls = [...new Set(allImageUrls)];
-      
       const urlToDataUriMap = new Map();
-      const conversionPromises = uniqueImageUrls.map(async (url) => {
-        const dataUri = await imageToDataUri(url);
-        urlToDataUriMap.set(url, dataUri);
+      const convertUrlToDataUri = async (url) => {
+        if (!url || isData(url)) return url;
+        let normalized = url;
+        if (!isHttp(normalized) && !/^presentation\//i.test(normalized)) {
+          normalized = resolveSrc(normalized);
+        }
+        if (urlToDataUriMap.has(normalized)) {
+          return urlToDataUriMap.get(normalized);
+        }
+        const dataUri = await imageToDataUri(normalized);
+        urlToDataUriMap.set(normalized, dataUri);
+        return dataUri;
+      };
+
+      const slidesWithDataUri = await Promise.all(slides.map(async (slide) => {
+        const clone = { ...slide };
+        if (clone.image) {
+          clone.image = await convertUrlToDataUri(clone.image);
+        }
+        return clone;
+      }));
+
+      const logoDataUri = cfg.logoUrl ? await convertUrlToDataUri(cfg.logoUrl) : null;
+
+      const workingRoot = document.createElement('div');
+      Object.assign(workingRoot.style, {
+        position: 'fixed',
+        pointerEvents: 'none',
+        opacity: '0',
+        visibility: 'hidden',
+        top: '0',
+        left: '0',
+        width: '0',
+        height: '0',
+        zIndex: '-1'
       });
-      await Promise.all(conversionPromises);
+      document.body.appendChild(workingRoot);
 
-      const slidesWithDataUri = slides.map(s => ({ ...s, image: s.image ? urlToDataUriMap.get(s.image) : null }));
-      const logoDataUri = cfg.logoUrl ? urlToDataUriMap.get(cfg.logoUrl) : null;
+      const slidesHtml = [];
 
-      // 2. Generate static HTML for each slide
-      const slidesHtml = slidesWithDataUri.map((s, i) => {
-        const contentOnly = !s.image && (s.title || s.subtitle || s.body);
-        const imageOnly = s.image && !s.title && !s.subtitle && !s.body;
-        
-        const imagePaneHtml = s.image ? `<div class="pane image-pane" style="background-image: url('${s.image}');"></div>` : '<div class="pane image-pane"></div>';
-        
-        const titleHtml = s.title ? `<div class="title">${s.title}</div>` : '';
-        const subtitleHtml = s.subtitle ? `<div class="subtitle">${s.subtitle}</div>` : '';
-        const bodyHtml = s.body ? `<div class="body md">${DOMPurify.sanitize(mdToHtmlWithVspace(s.body, cfg.gutter))}</div>` : '';
-        
-        const textPaneClasses = ['pane', 'text-pane'];
-        if (contentOnly) textPaneClasses.push('center');
-        
-        const textPaneHtml = (s.title || s.subtitle || s.body) ? `<div class="${textPaneClasses.join(' ')}" style="margin-top: ${s.v_margin || 0}px; margin-left: ${s.h_margin || 0}px; transform: scale(${s.zoom || 1});">
-          ${titleHtml}
-          ${subtitleHtml}
-          ${bodyHtml}
-        </div>` : '<div class="pane text-pane"></div>';
-
-        let gridStyle = 'grid-template-columns: 1fr 1fr;';
-        let imagePaneDisplay = 'block';
-        let textPaneDisplay = 'block';
-
-        if (imageOnly) {
-            gridStyle = 'grid-template-columns: 1fr;';
-            textPaneDisplay = 'none';
-        } else if (contentOnly) {
-            gridStyle = 'grid-template-columns: 1fr;';
-            imagePaneDisplay = 'none';
+      for (let i = 0; i < slidesWithDataUri.length; i++) {
+        const slideData = slidesWithDataUri[i];
+        const slideEl = document.createElement('div');
+        slideEl.classList.add('slide');
+        slideEl.id = `slide-${i}`;
+        slideEl.style.display = i === 0 ? 'grid' : 'none';
+        if (i === 0) {
+          slideEl.classList.add('active');
         }
 
-        const finalImagePane = imagePaneHtml.replace('class="pane image-pane"', `class="pane image-pane" style="display: ${imagePaneDisplay}; background-image: url('${s.image}');"`);
-        const finalTextPane = textPaneHtml.replace('class="pane text-pane', `class="pane text-pane" style="display: ${textPaneDisplay}; margin-top: ${s.v_margin || 0}px; margin-left: ${s.h_margin || 0}px; transform: scale(${s.zoom || 1});"`);
+        const contentOnly = slideIsContentOnly(slideData);
+        const imageOnly = slideIsImageOnly(slideData);
 
-        const slideContent = (cfg.imageSide === 'left') ? `${finalImagePane}${finalTextPane}` : `${finalTextPane}${finalImagePane}`;
+        const imagePane = document.createElement('div');
+        imagePane.classList.add('pane', 'image-pane');
 
-        return `<div class="slide" id="slide-${i}" style="display: ${i === 0 ? 'grid' : 'none'}; ${gridStyle}">
-          ${slideContent}
-        </div>`;
-      }).join('\n');
+        const textPane = document.createElement('div');
+        textPane.classList.add('pane', 'text-pane');
+        if (contentOnly) textPane.classList.add('center');
 
-      // 3. Generate CSS from the current config
-      const initialSlide = slides[0] || {};
+        if (cfg.imageSide === 'left') {
+          slideEl.append(imagePane, textPane);
+        } else {
+          slideEl.append(textPane, imagePane);
+        }
+
+        workingRoot.appendChild(slideEl);
+
+        setContentForImage(imagePane, slideData);
+        const renderPromise = setContentForText(textPane, slideData);
+
+        textPane.style.transform = `scale(${slideData.zoom || 1})`;
+        applySlideCustomStyles(slideData, textPane);
+
+        slideEl.style.gridTemplateColumns = (imageOnly || contentOnly) ? '1fr' : '1fr 1fr';
+        if (imageOnly) {
+          textPane.style.display = 'none';
+        } else if (contentOnly) {
+          imagePane.style.display = 'none';
+        }
+
+        if (renderPromise && typeof renderPromise.then === 'function') {
+          await renderPromise;
+        }
+
+        const inlineImages = Array.from(textPane.querySelectorAll('img'));
+        await Promise.all(inlineImages.map(async (img) => {
+          const src = img.getAttribute('src');
+          if (!src) return;
+          const dataUri = await convertUrlToDataUri(src);
+          if (dataUri) {
+            img.setAttribute('src', dataUri);
+          }
+        }));
+
+        slidesHtml.push(slideEl.outerHTML);
+      }
+
+      workingRoot.remove();
+
+      const initialSlide = slidesWithDataUri[0] || {};
       const googleFontsLink = cfg.googleFonts && cfg.googleFonts.length
         ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${cfg.googleFonts.map(f => 'family='+f.trim().replace(/\s+/g,'+')).join('&')}&display=swap">`
         : '';
@@ -857,29 +903,39 @@ function readPanelToConfig(){
           --body-size: ${cfg.bodySize}px;
           --line: ${cfg.lineHeight};
           --gutter: ${cfg.gutter}px;
-          --speed: 800ms; /* A fixed reasonable speed for the export */
+          --speed: 800ms;
           --easing: cubic-bezier(0.16,1,0.3,1);
           --title-font: ${cfg.titleFont};
           --body-font: ${cfg.bodyFont};
         }
       `;
-      
+
       const staticCss = `
         html, body { height: 100%; margin: 0; overflow: hidden; }
         body { background: var(--bg); color: var(--text); font-family: var(--body-font); transition: background-color var(--speed) var(--easing), color var(--speed) var(--easing); }
+        #stage { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
         .slide { position: absolute; inset: 0; opacity: 0; transition: opacity calc(var(--speed) / 2) var(--easing); pointer-events: none; }
         .slide.active { opacity: 1; z-index: 1; pointer-events: auto; }
         .pane { position: relative; overflow: hidden; }
         .image-pane { background-position: center; background-repeat: no-repeat; background-size: cover; }
         .text-pane { display: grid; grid-template-rows: auto auto 1fr; padding: 40px 32px; transform-origin: top left; }
-        .text-pane.center { place-items: center; align-content: center; justify-items: center; grid-template-rows: auto auto auto; text-align: center; transform-origin: center; padding: 40px; }
+        .text-pane.center { place-items: center; align-content: center; justify-items: center; grid-template-rows: auto auto auto; text-align: center; transform-origin: center; padding: 40px; padding-left: 0; padding-right: 0; }
         .title { font-size: var(--title-size); line-height: 0.95; font-weight: 700; letter-spacing: -0.5px; font-family: var(--title-font); color: var(--title-color); margin-bottom: 8px; }
         .subtitle { font-size: var(--subtitle-size); opacity: 0.85; margin-top: 0; font-family: var(--body-font); color: var(--text); }
-        .body { margin-top: var(--gutter); font-size: var(--body-size); line-height: var(--line); align-self: start; justify-self: center; width: 100%; max-width: 780px; }
+        .body { margin-top: var(--gutter); font-size: var(--body-size); line-height: var(--line); align-self: start; justify-self: center; width: 100%; max-width: 780px; font-family: var(--body-font); color: var(--text); }
+        .body p { margin: 0 0 calc(var(--gutter) / 2); }
         strong, b { color: var(--bold-text-color); }
         em, i { color: var(--accent); font-style: italic; }
+        .md blockquote { border-left: 4px solid var(--accent); padding-left: 12px; margin: 12px 0; opacity: 0.95; }
+        .md table { border-collapse: collapse; width: 100%; }
+        .md th, .md td { border: 1px solid #ffffff33; padding: 6px 10px; text-align: left; }
+        .md img { max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: 8px; }
+        .md pre { background-color: #282c34; color: #abb2bf; padding: 1em; border-radius: 8px; overflow-x: auto; font-family: 'Fira Code', 'Courier New', Courier, monospace; font-size: 0.9em; }
+        .md code:not(pre code) { background-color: #282c34; color: #abb2bf; padding: .2em .4em; border-radius: 4px; font-size: 0.9em; }
+        .md pre code { background-color: transparent; padding: 0; color: inherit; font-size: inherit; }
+        .md .mermaid { display: block; margin: 1.5em 0; }
         .vspace { width: 100%; }
-        img { max-width: 100%; border-radius: 8px; }
+        img { max-width: 100%; border-radius: 8px; height: auto; }
         #brandLogo { position: fixed; z-index: 200; pointer-events: none; }
         #blackout, #whiteout { position: fixed; inset: 0; pointer-events: none; z-index: 300; opacity: 0; transition: opacity 300ms ease; }
         #blackout { background: #000; }
@@ -889,10 +945,9 @@ function readPanelToConfig(){
         body.is-fullscreen #brandLogo { display: block !important; }
       `;
 
-      // 4. Lightweight interactivity script
       const interactivityScript = `
         const slides = document.querySelectorAll('.slide');
-        const slideInvert = ${JSON.stringify(slides.map(s => !!s.invert))};
+        const slideInvert = ${JSON.stringify(slidesWithDataUri.map(s => !!s.invert))};
         const slideColors = { bg: '${cfg.background}', text: '${cfg.textColor}' };
         let idx = 0;
 
@@ -907,7 +962,7 @@ function readPanelToConfig(){
             if (i < 0 || i >= slides.length || i === idx) return;
             const current = slides[idx];
             const next = slides[i];
-            
+
             if (current) {
                 current.classList.remove('active');
                 setTimeout(() => { current.style.display = 'none'; }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--speed')));
@@ -923,7 +978,7 @@ function readPanelToConfig(){
         function toggleBlack(){ document.body.classList.toggle('cover-black'); document.body.classList.remove('cover-white'); }
         function toggleWhite(){ document.body.classList.toggle('cover-white'); document.body.classList.remove('cover-black'); }
         function clearCovers(){ document.body.classList.remove('cover-black','cover-white'); }
-        
+
         async function toggleFullscreen(){
             try {
                 if (document.fullscreenElement) await document.exitFullscreen();
@@ -946,10 +1001,13 @@ function readPanelToConfig(){
             else if (e.clientX > window.innerWidth * 2 / 3) show(idx + 1);
         });
 
-        show(0); // Initial setup
+        show(0);
       `;
 
-      // 5. Assemble final HTML
+      const logoInlineStyle = logoDataUri
+        ? `${getLogoPositionStyle(cfg)} width: ${(cfg.logoSize || 120)}px; height: auto; opacity: ${cfg.logoOpacity}; border-radius: ${(cfg.logoRadius || 0)}px; ${cfg.logoShadow ? 'filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));' : 'filter: none;'}`
+        : '';
+
       const finalHtml = `
         <!DOCTYPE html>
         <html lang="fr">
@@ -965,10 +1023,9 @@ function readPanelToConfig(){
         </head>
         <body>
           <div id="stage">
-            ${slidesHtml}
+            ${slidesHtml.join('\n')}
           </div>
-          ${logoDataUri ? `<img id="brandLogo" src="${logoDataUri}" style="${getLogoPositionStyle(cfg)}" width="${cfg.logoSize}" height="${cfg.logoSize}" alt="Logo">
-          ` : ''}
+          ${logoDataUri ? `<img id="brandLogo" src="${logoDataUri}" style="${logoInlineStyle}" alt="Logo">` : ''}
           <div id="blackout"></div>
           <div id="whiteout"></div>
           <script>
@@ -978,7 +1035,6 @@ function readPanelToConfig(){
         </html>
       `;
 
-      // 6. Trigger download
       const blob = new Blob([finalHtml.trim()], { type: 'text/html' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
