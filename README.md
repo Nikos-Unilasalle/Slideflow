@@ -53,13 +53,17 @@ Le contenu de votre présentation se trouve dans le fichier `presentation/presen
 -   **Contenu** : Vous pouvez utiliser la syntaxe Markdown standard pour formater votre texte (titres, listes, gras, italique, etc.).
     -   `# Mon Titre` : Titre de la diapositive.
     -   `## Mon sous-titre` : Sous-titre de la diapositive.
--   **Images** : Pour ajouter une image de fond à une diapositive, utilisez le "frontmatter" YAML en début de diapositive :
+-   **Images de fond** : Pour ajouter une image de fond à une diapositive, utilisez le "frontmatter" YAML en début de diapositive :
     ```yaml
     ---
     image: nom_de_votre_image.png
     ---
     ```
-    Les images doivent être placées dans le dossier `presentation/img/`.
+-   **Images dans le contenu** : Pour insérer une image directement dans votre texte, la syntaxe a été simplifiée. Utilisez simplement des crochets :
+    ```markdown
+    Ceci est un texte avec une image : [mon_image.jpg]
+    ```
+-   **Dossier des images** : Toutes vos images (de fond ou de contenu) doivent être placées dans le dossier `presentation/img/`.
 
 ### Interface Utilisateur (HUD)
 
@@ -70,7 +74,7 @@ L'interface principale vous permet de contrôler la présentation et la personna
 -   **Sauvegarder la présentation** : Télécharge le contenu actuel de votre présentation dans un nouveau fichier `presentation.md`. Pensez à remplacer l'ancien par celui-ci pour conserver vos modifications.
 -   **Charger un thème** : Vous permet de charger un fichier `theme.json` pour appliquer un style sauvegardé.
 -   **Sauvegarder le thème** : Télécharge les réglages de style actuels dans un fichier `theme.json`.
--   **Télécharger la présentation** : Exporte votre diaporama complet en un seul fichier HTML autonome, facile à partager.
+-   **Télécharger la présentation** : Exporte votre diaporama complet en un seul fichier HTML interactif. Toutes les images sont incluses dans ce fichier, le rendant parfaitement autonome et facile à partager.
 -   **🎨 Textes** : Ouvre le panneau de personnalisation des polices et des couleurs.
 -   **✨ Effets** : Ouvre le panneau de personnalisation des effets visuels.
 
