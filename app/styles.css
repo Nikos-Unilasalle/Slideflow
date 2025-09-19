@@ -8,10 +8,43 @@
 *{box-sizing:border-box} html,body,#app{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font-family:Arial, sans-serif;}
 
-#hud{position:fixed;top:12px;right:12px;display:flex;flex-direction:column;gap:8px;align-items:stretch;z-index:210;max-width:500px;background:rgba(0,0,0,0.7);border-radius:10px;padding:12px;}
-#hud .hud-row{display:flex;gap:8px;justify-content:flex-end;align-items:center;width:100%;}
-#hud .hud-row.hud-primary{flex-wrap:nowrap;}
-#hud .hud-row.hud-secondary{flex-wrap:wrap;}
+#hud{
+  position:fixed;
+  top:12px;
+  right:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  align-items:stretch;
+  z-index:210;
+  width:calc(100vw - 24px);
+  max-width:720px;
+  background:rgba(0,0,0,0.7);
+  border-radius:10px;
+  padding:12px;
+}
+#hud .hud-row{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  width:100%;
+}
+#hud .hud-row.hud-primary{
+  flex-wrap:nowrap;
+  justify-content:space-between;
+}
+#hud .hud-row.hud-primary .hud-group{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+#hud .hud-row.hud-secondary{
+  flex-wrap:nowrap;
+  justify-content:center;
+}
+#hud .hud-row.hud-secondary button{
+  white-space:nowrap;
+}
 #hud button{background:#ffffff22;color:#fff;border:0;padding:6px 10px;border-radius:10px;cursor:pointer;flex-shrink:0;}
 #pos{color:#fff;padding:4px 8px;border-radius:10px;background:#ffffff22;font-size:12px}
 
