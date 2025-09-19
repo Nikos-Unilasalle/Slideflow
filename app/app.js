@@ -138,10 +138,15 @@
     }
     if (run > 0) out.push(`::VSPACE=${run}::`);
     const html = marked.parse(out.join("\n"));
-    return html.replace(/::VSPACE=(\d+)::/g, (_, n) => {
-      const h = Number(n) * (gutterPx || 24);
-      return `<div class=\"vspace\" style=\"height:${h}px"></div>`;
+    const parsedGutter = Number(gutterPx);
+    const baseHeight = Math.max(Number.isFinite(parsedGutter) ? parsedGutter : 24, 0);
+    const spacedHtml = html.replace(/::VSPACE=(\d+)::/g, (_, n) => {
+      const count = Math.max(parseInt(n, 10) || 0, 0);
+      if (!count) return '';
+      const spacer = `<div class=\"vspace\" style=\"height:${baseHeight}px"></div>`;
+      return spacer.repeat(count);
     });
+    return spacedHtml.replace(/<p>(\s*(?:<div class=\"vspace\"[^>]*><\/div>\s*)+)<\/p>/g, '$1');
   }
 
   function injectGoogleFonts(families){
@@ -233,7 +238,10 @@
 
   function parseSlides(md){
     if (!md) return [];
-    const parts = md.split(/^===\s*$\n/m).map(s=>s.trim()).filter(Boolean);
+    const parts = md
+      .split(/^===\s*$\n/m)
+      .map(part => part.replace(/\r/g, ''))
+      .filter(part => part.trim().length > 0);
     return parts.map(parseSlide);
   }
 
@@ -264,7 +272,7 @@
     const tIdx = rest.findIndex(l=> /^#\s+/.test(l)); if(tIdx!==-1){ title = rest[tIdx].replace(/^#\s+/, '').trim(); rest.splice(tIdx,1); }
     const stIdx = rest.findIndex(l=> /^##\s+/.test(l)); if(stIdx!==-1){ subtitle = rest[stIdx].replace(/^##\s+/, '').trim(); rest.splice(stIdx,1); }
 
-    const body = rest.join('\n').trim();
+    const body = rest.join('\n');
     return { image, originalImage, title, subtitle, body, invert, vShiftUnits, zoom, v_margin, h_margin, rawContent };
   }
 
