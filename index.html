@@ -15,11 +15,15 @@
   <div id="app">
     <div id="hud">
       <div class="hud-row hud-primary">
-        <button id="prev" type="button">◀︎</button>
-        <div id="pos">1/1</div>
-        <button id="next" type="button">▶︎</button>
-        <button id="openPanelText" type="button">🎨 Textes</button>
-        <button id="openPanelEffects" type="button">✨ Effets</button>
+        <div class="hud-group nav-controls">
+          <button id="prev" type="button">◀︎</button>
+          <div id="pos">1/1</div>
+          <button id="next" type="button">▶︎</button>
+        </div>
+        <div class="hud-group panel-controls">
+          <button id="openPanelText" type="button">🎨 Textes</button>
+          <button id="openPanelEffects" type="button">✨ Effets</button>
+        </div>
       </div>
       <div class="hud-row hud-secondary">
         <button id="invert-layout-btn" type="button" style="display: none;">↔ Inverser</button>
