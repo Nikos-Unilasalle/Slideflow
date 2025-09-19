@@ -1,18 +1,18 @@
 ---
-image: screencopy.jpg
+zoom: 1.1
+v_margin: 300
 ---
+# Slideflow
+## votre nouvel ami
+[heart.jpg]
 
-# Sophie pour toujours
-## tu es la boum
-[c.png]
-Bonjour et merci 
-
-
-
-Pouet
 ===
 
+## pour la vie
 
+
+
+===
 
 ---
 image: a.png
@@ -24,7 +24,9 @@ image: a.png
 * Thème personnalisable
 
 
+
 ===
+
 ---
 image: b.png
 ---
@@ -32,22 +34,30 @@ image: b.png
 # Markdown power
 ## Standard pour le texte
 
-> La présentation s'écrit en markdown
-> avec **hashtags**, citations, listes, *tableaux*
-> ... et de simples crochets pour les images
+1. La présentation s'écrit en markdown
+2. ...avec **hashtags**, citations, listes
+3. des *tableaux*
+
+4. ... et des crochets pour les images
+
+comme ça ↴
 
 ```
 [mon_image]
 ```
 
+
 ===
+
 # Regardez,
-## Un bout de code !!!
+## ON PEUT MÊME METTRE DU CODE !
 
 ```
-print('Hello world...')
+print('Hello UniLasalle...')
 ```
+
 ===
+
 ---
 image: c.png
 ---
@@ -59,11 +69,18 @@ image: c.png
 3. Logo intégré
 4. Animation
 
+
 ===
 
 ---
 image: d.png
 ---
+
+
+===
+
+# WOW
+## Le slide précédent n'avait qu'une image !
 
 ===
 
@@ -75,9 +92,16 @@ image: e.png
 ## au niveau des slides
 
 # **zoom**,**marges**...
-Il faut penser à enregistrer 
+(Il faut penser à enregistrer 
 la présentation
-pour les conserver. 
+pour les conserver.)
+
+===
+
+[beer.png]
+
+... je reprends mon souffle ...
+
 
 ===
 
@@ -87,30 +111,30 @@ image: f.png
 # Quelques raccourcis
 ## Pour présenter
 
+
+
+
 |RACCOURCIS|EFFET|
 |--|--|
 |**i**|masquer/afficher l'interface|
 |**f** | passer en plein écran|
-|**espace** | afficher le pointeur de feu|
+|**espace** | afficher le *pointeur de feu*|
 |**flèches** | circuler dans les slides|
 |**w** et **b** | fondu au blanc ou au noir|
 
+[pointer.png]
+
 
 ===
- ```mermaid
-graph LR
-    A[Square Rect] -- Link text --> B((Circle))
-    A --> C(Round Rect)
-    B --> D{Rhombus}
-    C --> D
-```
-===
 
-$$f(x)$$
-
-$f(x)$
-
-===
 # Voilà
 ## Merci de votre attention
+
 ===
+
+---
+zoom: 0.65
+v_margin: 300
+---
+## bien cordialement
+#### et tout et tout
