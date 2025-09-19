@@ -11,7 +11,7 @@
   "bodySize": 34,
   "lineHeight": 1.3,
   "gutter": 24,
-  "speed": 1250,
+  "speed": 50,
   "easing": "expo",
   "vignette": true,
   "vignetteStrength": 0.13,
