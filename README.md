@@ -1,12 +1,12 @@
-# SlideFlow Lite
+# SlideFlow
 
-SlideFlow Lite est un outil de présentation léger et élégant qui vous permet de créer des diaporamas directement à partir de fichiers Markdown. Il est conçu pour être simple, rapide et entièrement personnalisable via une interface intuitive.
+SlideFlow Lite est un outil de présentation léger et élégant qui vous permet de créer des diaporamas directement à partir de fichiers Markdown. Il est conçu pour être simple, rapide et entièrement personnalisable.
 
 Toutes vos modifications (contenu, thème, etc.) sont sauvegardées dans des fichiers locaux (`presentation.md`, `theme.json`), vous gardez donc un contrôle total sur votre projet.
 
 ## Lancement
 
-SlideFlow Lite est une application web statique. Pour la faire fonctionner, vous avez simplement besoin de servir les fichiers via un serveur HTTP local. La méthode la plus simple est d'utiliser le serveur intégré de Python.
+SlideFlow est une application web statique. Pour la faire fonctionner, vous avez simplement besoin de servir les fichiers via un serveur HTTP local. La méthode la plus simple est d'utiliser le serveur intégré de Python.
 
 **Prérequis :** Assurez-vous que Python est installé sur votre machine.
 
@@ -72,7 +72,6 @@ L'interface principale vous permet de contrôler la présentation et la personna
 -   **◀︎ / ▶︎** : Naviguer entre les diapositives.
 -   **Indicateur de position** : Affiche la diapositive actuelle et le nombre total de diapositives.
 -   **Sauvegarder la présentation** : Télécharge le contenu actuel de votre présentation dans un nouveau fichier `presentation.md`. Pensez à remplacer l'ancien par celui-ci pour conserver vos modifications.
--   **Charger un thème** : Vous permet de charger un fichier `theme.json` pour appliquer un style sauvegardé.
 -   **Sauvegarder le thème** : Télécharge les réglages de style actuels dans un fichier `theme.json`.
 -   **Télécharger la présentation** : Exporte votre diaporama complet en un seul fichier HTML interactif. Toutes les images sont incluses dans ce fichier, le rendant parfaitement autonome et facile à partager.
 -   **🎨 Textes** : Ouvre le panneau de personnalisation des polices et des couleurs.
@@ -106,14 +105,13 @@ Pour chaque diapositive, vous pouvez ajuster dynamiquement :
 -   **Zoom** : Zoome sur le contenu textuel de la diapositive.
 -   **Marge Vert. / Horiz.** : Ajoute des marges verticales ou horizontales au contenu textuel.
 
-Ces réglages sont sauvegardés avec la présentation.
+Ces réglages sont sauvegardés avec la présentation. Si vous utilisez ces réglages, il faudra télécharger votre présentation pour les y intégrer définitivement.
 
 ### Raccourcis clavier
 
 -   **Flèches Gauche / Droite** ou **Page Précédente / Suivante** : Naviguer.
--   **Espace** : Diapositive suivante.
+-   **Espace** : Faire apparaître un pointeur de feu
 -   **F** : Activer/désactiver le mode plein écran.
 -   **I** : Masquer/afficher l'interface utilisateur (HUD).
 -   **B** : Afficher un écran noir.
 -   **W** : Afficher un écran blanc.
--   **Échap** : Quitter le mode écran noir/blanc.
