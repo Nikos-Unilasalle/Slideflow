@@ -14,16 +14,19 @@
 <body>
   <div id="app">
     <div id="hud">
-      <button id="prev" type="button">◀︎</button>
-      <div id="pos">1/1</div>
-      <button id="next" type="button">▶︎</button>
-      <button id="invert-layout-btn" type="button" style="display: none;">↔ Inverser</button>
-      <button id="btn-save" type="button">Sauvegarder la présentation</button>
-      <label class="file-btn small" id="load-theme-btn-label">Charger un thème<input type="file" id="load-theme-input" accept=".json"/></label>
-      <button id="save-theme-btn" type="button">Sauvegarder le thème</button>
-      <button id="export-html-btn" type="button">Télécharger la présentation</button>
-      <button id="openPanelText" type="button">🎨 Textes</button>
-      <button id="openPanelEffects" type="button">✨ Effets</button>
+      <div class="hud-row hud-primary">
+        <button id="prev" type="button">◀︎</button>
+        <div id="pos">1/1</div>
+        <button id="next" type="button">▶︎</button>
+        <button id="openPanelText" type="button">🎨 Textes</button>
+        <button id="openPanelEffects" type="button">✨ Effets</button>
+      </div>
+      <div class="hud-row hud-secondary">
+        <button id="invert-layout-btn" type="button" style="display: none;">↔ Inverser</button>
+        <button id="btn-save" type="button">Sauvegarder la présentation</button>
+        <button id="save-theme-btn" type="button">Sauvegarder le thème</button>
+        <button id="export-html-btn" type="button">Télécharger la présentation</button>
+      </div>
     </div>
 
     <div id="slider-controls">
