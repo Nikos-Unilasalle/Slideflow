@@ -156,7 +156,7 @@ body.hide-ui #hud, body.hide-ui .panel, body.hide-ui #slider-controls { display:
 .text-pane .subtitle{font-size:var(--subtitle-size);opacity:0.85;margin-top:0;font-family:var(--body-font); color: var(--text);}
 
 .text-pane .title { margin-bottom: 8px; /* Add a small gap between title and subtitle */ }
-.text-pane .body{margin-top:var(--gutter);font-size:var(--body-size);line-height:var(--line);align-self:start;justify-self:center;width:100%;max-width:780px;font-family:var(--body-font); color: var(--text);}
+.text-pane .body{margin-top:var(--gutter);font-size:var(--body-size);line-height:var(--line);align-self:start;width:100%;max-width:780px;font-family:var(--body-font); color: var(--text);}
 .text-pane.center .body{display:flex;flex-direction:column;align-items:center;width:100%;}
 .text-pane.center .body>*{width:100%;}
 .text-pane.center .md pre{align-self:center;margin-left:auto;margin-right:auto;text-align:left;width:auto;max-width:100%;}
