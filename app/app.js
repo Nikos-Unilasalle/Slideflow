@@ -14,11 +14,33 @@
     breaks: true
   });
 
+  const keyword = {
+    name: 'keyword',
+    level: 'inline',
+    start(src) { return src.indexOf('{'); },
+    tokenizer(src, tokens) {
+      const rule = /^\{([^}]+)\}/;
+      const match = rule.exec(src);
+      if (match) {
+        return {
+          type: 'keyword',
+          raw: match[0],
+          text: match[1].trim()
+        };
+      }
+    },
+    renderer(token) {
+      return `<span class="keyword">${token.text}</span>`;
+    }
+  };
+
+  marked.use({ extensions: [keyword] });
+
   mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
 
   // Configure DOMPurify to allow SVG elements and attributes for Mermaid diagrams
   DOMPurify.setConfig({
-    ADD_TAGS: ['svg', 'path', 'g', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan'],
+    ADD_TAGS: ['svg', 'path', 'g', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan', 'span', 'div'],
     ADD_ATTR: ['viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'class', 'style', 'd', 'transform', 'x', 'y', 'r', 'cx', 'cy', 'x1', 'y1', 'x2', 'y2', 'points', 'font-family', 'font-size', 'text-anchor', 'dominant-baseline']
   });
 
@@ -35,7 +57,7 @@
   const pos = document.getElementById('pos');
   const prev = document.getElementById('prev');
   const next = document.getElementById('next');
-  
+
   const openPanelText = document.getElementById('openPanelText');
   const panelText = document.getElementById('panel-text');
   const closePanelText = document.getElementById('closePanelText');
@@ -55,19 +77,19 @@
   const p = {
     background: document.getElementById('p_background'),
     titleColor: document.getElementById('p_titleColor'),
-    textColor: document.getElementById('p_textColor'),
+    textColor:  document.getElementById('p_textColor'),
     accentColor: document.getElementById('p_accentColor'),
     boldColor: document.getElementById('p_boldColor'),
     imageSide: document.getElementById('p_imageSide'),
     titleSize: document.getElementById('p_titleSize'),
     subtitleSize: document.getElementById('p_subtitleSize'),
-    bodySize: document.getElementById('p_bodySize'),
+    bodySize:   document.getElementById('p_bodySize'),
     lineHeight: document.getElementById('p_lineHeight'),
-    gutter: document.getElementById('p_gutter'),
-    speed: document.getElementById('p_speed'),
+    gutter:     document.getElementById('p_gutter'),
+    speed:      document.getElementById('p_speed'),
     vignetteStrength: document.getElementById('p_vignetteStrength'),
     foldImageOpacity: document.getElementById('p_foldImageOpacity'),
-    logoSize: document.getElementById('p_logoSize'),
+    logoSize:   document.getElementById('p_logoSize'),
     logoOpacity: document.getElementById('p_logoOpacity'),
     logoCorner: document.getElementById('p_logoCorner'),
     logoMargin: document.getElementById('p_logoMargin'),
@@ -93,7 +115,7 @@
     return 'presentation/img/' + clean;
   }
 
-  
+
   function extractLeadingVShift(lines){
     let totalUnits = 0; let i = 0;
     while (i < lines.length){
@@ -104,6 +126,8 @@
     }
     return { totalUnits, startIndex: i };
   }
+
+
   function mdToHtmlWithVspace(mdText, gutterPx){
     // Convert custom [filename.ext] syntax to standard Markdown image syntax
     // Store code blocks temporarily
@@ -129,23 +153,54 @@
     }
 
     const lines = preprocessedMd.split("\n");
-    const out = []; let run = 0;
+    const out = [];
+    let run = 0; // Compteur pour les lignes vides consécutives (pour VSPACE)
+    let wasInBlockquote = false; // Suivi de l'état : étions-nous dans une citation ?
+
     for (const l of lines){
-      if (/^\s*$/.test(l)) { run += 1; continue; }
-      if (run > 0){ out.push(`::VSPACE=${run}::`); run = 0; }
+      const isQuoteLine = l.trim().startsWith('>');
+
+      // Si c'est une ligne vide, on incrémente le compteur VSPACE
+      if (/^\s*$/.test(l)) {
+        run += 1;
+        wasInBlockquote = false; // Une ligne vide termine toujours une citation
+        continue;
+      }
+
+      // Si ce n'est PAS une ligne vide :
+      // 1. On vérifie si on sort d'une citation sans ligne vide
+      if (wasInBlockquote && !isQuoteLine) {
+        // C'est le cas critique ! On doit insérer une VRAIE ligne vide
+        // que Marked pourra interpréter pour fermer le blockquote.
+        out.push('');
+      }
+
+      // 2. On traite les lignes vides accumulées (VSPACE)
+      if (run > 0){
+        out.push(`<!--VSPACE:${run}-->`);
+        run = 0;
+      }
+
+      // 3. On ajoute la ligne de contenu actuelle
       out.push(l);
+
+      // 4. On met à jour notre état pour la prochaine itération
+      wasInBlockquote = isQuoteLine;
     }
-    if (run > 0) out.push(`::VSPACE=${run}::`);
+    // S'il reste des lignes vides à la fin du fichier
+    if (run > 0) out.push(`<!--VSPACE:${run}-->`);
+
     const html = marked.parse(out.join("\n"));
+
     const parsedGutter = Number(gutterPx);
     const baseHeight = Math.max(Number.isFinite(parsedGutter) ? parsedGutter : 24, 0);
-    const spacedHtml = html.replace(/::VSPACE=(\d+)::/g, (_, n) => {
+    const spacedHtml = html.replace(/<!--VSPACE:(\d+)-->/g, (_, n) => {
       const count = Math.max(parseInt(n, 10) || 0, 0);
       if (!count) return '';
-      const spacer = `<div class=\"vspace\" style=\"height:${baseHeight}px"></div>`;
+      const spacer = `<div class="vspace" style="height:${baseHeight}px"></div>`;
       return spacer.repeat(count);
     });
-    return spacedHtml.replace(/<p>(\s*(?:<div class=\"vspace\"[^>]*><\/div>\s*)+)<\/p>/g, '$1');
+    return spacedHtml;
   }
 
   function injectGoogleFonts(families){
@@ -244,37 +299,59 @@
     return parts.map(parseSlide);
   }
 
-  function parseSlide(chunk){
-    let image="", content=chunk, invert=false, zoom = 1, originalImage = "", v_margin = 0, h_margin = 0;
-    const fm = chunk.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
-    let rawContent = chunk;
+  // Fichier : app.js
 
+  function parseSlide(chunk){
+    // 1. Initialiser toutes les variables, y compris 'tags'
+    let image = "", invert = false, zoom = 1, originalImage = "", v_margin = 0, h_margin = 0, tags = [];
+    let rawContent = chunk; // Par défaut, le contenu brut est tout le chunk
+
+    const fm = chunk.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+
+    // 2. S'il y a du front-matter, on le traite dans un SEUL bloc try...catch
     if(fm){
       try{
-        const data=jsyaml.load(fm[1])||{};
-        originalImage = data.image||data.img||data.cover||"";
+        const data = jsyaml.load(fm[1]) || {};
+
+        // Extraction de toutes les données
+        originalImage = data.image || data.img || data.cover || "";
         image = resolveSrc(originalImage);
-        const themeStr = String((data.theme||data.mode||'')||'').toLowerCase();
-        invert = !!(data.invert || data.light || themeStr==='light');
+
+        const themeStr = String((data.theme || data.mode || '') || '').toLowerCase();
+        invert = !!(data.invert || data.light || themeStr === 'light');
+
         zoom = parseFloat(data.zoom) || 1;
         v_margin = parseInt(data.v_margin, 10) || 0;
         h_margin = parseInt(data.h_margin, 10) || 0;
+
+        // Logique pour les tags
+        const tagsString = (data.tags || '').trim();
+        if (tagsString) {
+          tags = tagsString.split(',').map(tag => tag.trim());
+        }
+
+        // On met à jour rawContent pour qu'il ne contienne QUE le texte APRÈS le front-matter
         rawContent = chunk.slice(fm[0].length);
-      }catch(e){ console.error("Failed to parse frontmatter", e); }
+
+      } catch(e) {
+        console.error("Failed to parse frontmatter", e);
+      }
     }
 
+    // 3. Le reste de la fonction traite le 'rawContent' qui a été nettoyé
     const lines = rawContent.split(/\n/);
     const { totalUnits: vShiftUnits, startIndex } = extractLeadingVShift(lines);
     const rest = lines.slice(startIndex);
 
-    let title="", subtitle="";
+    let title = "", subtitle = "";
     const tIdx = rest.findIndex(l=> /^#\s+/.test(l)); if(tIdx!==-1){ title = rest[tIdx].replace(/^#\s+/, '').trim(); rest.splice(tIdx,1); }
     const stIdx = rest.findIndex(l=> /^##\s+/.test(l)); if(stIdx!==-1){ subtitle = rest[stIdx].replace(/^##\s+/, '').trim(); rest.splice(stIdx,1); }
 
     const body = rest.join('\n');
-    return { image, originalImage, title, subtitle, body, invert, vShiftUnits, zoom, v_margin, h_margin, rawContent };
-  }
 
+    // 4. On retourne TOUTES les données, y compris les tags
+    return { image, originalImage, title, subtitle, body, invert, vShiftUnits, zoom, v_margin, h_margin, rawContent, tags };
+  }
   function slideIsImageOnly(s){ return (!!s.image) && (!s.title?.trim()) && (!s.subtitle?.trim()) && (!s.body?.trim()); }
   function slideIsContentOnly(s){ return (!s.image) && (s.title?.trim() || s.subtitle?.trim() || s.body?.trim()); }
 
@@ -313,21 +390,22 @@
   }
 
   function setContentForText(dom, s){
-    dom.innerHTML = '<div class="title"></div><div class="subtitle"></div><div class="body md"></div>';
-    const basePad = 40;
-    const extra = (s.vShiftUnits || 0) * (cfg.gutter || 24);
-    if (dom.classList.contains('center')) dom.style.paddingTop = basePad + 'px';
-    else dom.style.paddingTop = (basePad + extra) + 'px';
+  dom.innerHTML = '<div class="title"></div><div class="subtitle"></div><div class="body md"></div>';
+  const basePad = 40;
+  const extra = (s.vShiftUnits || 0) * (cfg.gutter || 24);
+  if (dom.classList.contains('center')) dom.style.paddingTop = basePad + 'px';
+  else dom.style.paddingTop = (basePad + extra) + 'px';
 
-    const titleEl = dom.querySelector('.title');
-    const subtitleEl = dom.querySelector('.subtitle');
-    const bodyEl = dom.querySelector('.body');
+  const titleEl = dom.querySelector('.title');
+  const subtitleEl = dom.querySelector('.subtitle');
+  const bodyEl = dom.querySelector('.body');
 
-    titleEl.textContent = s.title || '';
-    subtitleEl.textContent = s.subtitle || '';
+  titleEl.textContent = s.title || '';
+  subtitleEl.textContent = s.subtitle || '';
 
-    const safeHtml = DOMPurify.sanitize(mdToHtmlWithVspace(s.body || '', cfg.gutter));
-    bodyEl.innerHTML = safeHtml;
+  const safeHtml = DOMPurify.sanitize(mdToHtmlWithVspace(s.body || '', cfg.gutter));
+
+  bodyEl.innerHTML = safeHtml;
 
     dom.querySelectorAll('.body img').forEach(img=>{
       const src=img.getAttribute('src')||'';
@@ -379,6 +457,20 @@ function updateFoldOverlayForSlide(s){
     if(busy) return; busy=true; i = clamp(i,0,slides.length-1);
     const nextBuf = 1 - active;
     const s = slides[i];
+
+    const tagsContainer = document.getElementById('tags');
+    tagsContainer.innerHTML = '';
+    if (s.tags && s.tags.length > 0) {
+      const tagsWrapper = document.createElement('div');
+      tagsWrapper.className = 'tags-container';
+      s.tags.forEach(tag => {
+        const tagElement = document.createElement('span');
+        tagElement.className = 'tag-item';
+        tagElement.textContent = tag;
+        tagsWrapper.appendChild(tagElement);
+      });
+      tagsContainer.appendChild(tagsWrapper);
+    }
 
     const imagePane = (cfg.imageSide === 'left') ? P1[0].parentElement : P2[0].parentElement;
     const textPane = (cfg.imageSide === 'left') ? P2[0].parentElement : P1[0].parentElement;
@@ -524,7 +616,7 @@ initKeyboard();
 
   function populatePanel(){
     if(!panelText) return;
-    
+
     const fields = ['titleSize', 'subtitleSize', 'bodySize', 'lineHeight', 'gutter', 'speed', 'logoSize', 'logoMargin', 'logoRadius'];
 
     p.background.value = (cfg.background);
@@ -586,7 +678,7 @@ function readPanelToConfig(){
   updateFoldOverlayForSlide(slides[idx] || {});
 }
 
-  Object.values(p).forEach(el=>{ 
+  Object.values(p).forEach(el=>{
       if(!el) return;
       const eventType = (el.type === 'range' || el.type === 'text' || el.type === 'color') ? 'input' : 'change';
       el.addEventListener(eventType, e => {
@@ -596,7 +688,7 @@ function readPanelToConfig(){
         }
       });
   });
-  
+
 
   ['gf_title_family','gf_title_fallback',
  'gf_body_family','gf_body_fallback']
@@ -635,7 +727,7 @@ function readPanelToConfig(){
     if(!slides.length) {
       slides = [{ rawContent: 'Erreur: Impossible de charger ou parser presentation.md', title: 'Erreur de chargement', subtitle: '', body: 'Veuillez vérifier que le fichier presentation.md existe et est correctement formaté.', zoom: 1, v_margin: 0, h_margin: 0, invert: false, originalImage: '' }];
     }
-    
+
     show(0, 0);
   }
 
@@ -652,7 +744,7 @@ function readPanelToConfig(){
       if (Object.keys(frontmatter).length > 0) {
         fmString = `---\n${jsyaml.dump(frontmatter)}---\n`;
       }
-      
+
       return fmString + s.rawContent;
     }).join('\n===\n\n');
   }
@@ -1048,7 +1140,7 @@ function readPanelToConfig(){
       a.href = URL.createObjectURL(blob);
       a.download = 'presentation.html';
       a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 500);
+      setTimeout(()=>URL.revokeObjectURL(a.href), 500);
 
       alert('Téléchargement terminé ! Le fichier HTML est entièrement autonome.');
 
