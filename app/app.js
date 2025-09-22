@@ -69,6 +69,26 @@
   const logoImg = document.getElementById('brandLogo');
   const foldImg = document.getElementById('foldImage');
 
+  let tagsLayer = document.getElementById('tags');
+  if (!tagsLayer) {
+    tagsLayer = document.createElement('div');
+    tagsLayer.id = 'tags';
+    tagsLayer.setAttribute('aria-hidden', 'true');
+    stage.appendChild(tagsLayer);
+  }
+  if (tagsLayer) {
+    tagsLayer.style.position = 'absolute';
+    tagsLayer.style.inset = '0';
+    tagsLayer.style.pointerEvents = 'none';
+    tagsLayer.style.zIndex = '120';
+    tagsLayer.style.margin = '0';
+    tagsLayer.style.padding = '0';
+    tagsLayer.style.boxSizing = 'border-box';
+    tagsLayer.style.display = 'block';
+    tagsLayer.style.gridColumn = '1 / -1';
+    tagsLayer.style.gridRow = '1 / -1';
+  }
+
   const P1 = [document.getElementById('B1-0'), document.getElementById('B1-1')];
   const P2 = [document.getElementById('B2-0'), document.getElementById('B2-1')];
   const allBuffers = [...P1, ...P2];
@@ -460,9 +480,8 @@ function updateFoldOverlayForSlide(s){
     const nextBuf = 1 - active;
     const s = slides[i];
 
-    const tagsContainer = document.getElementById('tags');
-    if (tagsContainer) {
-      tagsContainer.innerHTML = '';
+    if (tagsLayer) {
+      tagsLayer.innerHTML = '';
       if (s.tags && s.tags.length > 0) {
         const tagsWrapper = document.createElement('div');
         tagsWrapper.className = 'tags-container';
@@ -472,7 +491,7 @@ function updateFoldOverlayForSlide(s){
           tagElement.textContent = tag;
           tagsWrapper.appendChild(tagElement);
         });
-        tagsContainer.appendChild(tagsWrapper);
+        tagsLayer.appendChild(tagsWrapper);
       }
     }
 
@@ -902,34 +921,78 @@ function readPanelToConfig(){
     const createTagsCloneForSlide = (slideData, referencePane, cloneFn) => {
       if (!slideData || !Array.isArray(slideData.tags) || !slideData.tags.length) return null;
 
-      const wrapper = document.createElement('div');
-      wrapper.className = 'text-pane' + (referencePane && referencePane.classList.contains('center') ? ' center' : '');
-      wrapper.style.position = 'fixed';
-      wrapper.style.opacity = '0';
-      wrapper.style.pointerEvents = 'none';
-      wrapper.style.zIndex = '-1';
-      wrapper.style.inset = '0';
-      document.body.appendChild(wrapper);
+      let nodeToClone = (tagsLayer && tagsLayer.firstElementChild) ? tagsLayer.firstElementChild : null;
+      let cleanup = null;
 
-      const tagsContainer = document.createElement('div');
-      tagsContainer.className = 'tags-container';
-      slideData.tags.forEach(tag => {
-        const tagElement = document.createElement('span');
-        tagElement.className = 'tag-item';
-        tagElement.textContent = tag;
-        tagsContainer.appendChild(tagElement);
-      });
-      wrapper.appendChild(tagsContainer);
+      if (!nodeToClone) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'text-pane' + (referencePane && referencePane.classList.contains('center') ? ' center' : '');
+        wrapper.style.position = 'fixed';
+        wrapper.style.opacity = '0';
+        wrapper.style.pointerEvents = 'none';
+        wrapper.style.zIndex = '-1';
+        wrapper.style.inset = '0';
 
-      const clone = cloneFn(tagsContainer, { removeIds: true });
-      wrapper.remove();
-      if (clone && clone.style) {
-        clone.style.position = 'absolute';
-        clone.style.left = '50%';
-        clone.style.right = '';
-        clone.style.transform = 'translateX(-50%)';
-        clone.style.pointerEvents = 'none';
+        const tagsContainer = document.createElement('div');
+        tagsContainer.className = 'tags-container';
+        slideData.tags.forEach(tag => {
+          const tagElement = document.createElement('span');
+          tagElement.className = 'tag-item';
+          tagElement.textContent = tag;
+          tagsContainer.appendChild(tagElement);
+        });
+
+        wrapper.appendChild(tagsContainer);
+        document.body.appendChild(wrapper);
+
+        nodeToClone = tagsContainer;
+        cleanup = () => wrapper.remove();
       }
+
+      if (!nodeToClone) return null;
+
+      const containerStyle = window.getComputedStyle(nodeToClone);
+      const clone = cloneFn(nodeToClone, { removeIds: true });
+
+      if (cleanup) cleanup();
+
+      if (clone && clone.style) {
+        const bottom = containerStyle.getPropertyValue('bottom') || '20px';
+        const gap = containerStyle.getPropertyValue('gap')
+          || containerStyle.getPropertyValue('column-gap')
+          || '8px';
+        const wrap = containerStyle.getPropertyValue('flex-wrap') || 'wrap';
+        const alignItems = containerStyle.getPropertyValue('align-items') || 'center';
+        const justifyContent = containerStyle.getPropertyValue('justify-content') || 'center';
+        const alignContent = containerStyle.getPropertyValue('align-content') || 'center';
+        const paddingLeft = containerStyle.getPropertyValue('padding-left') || '0px';
+        const paddingRight = containerStyle.getPropertyValue('padding-right') || paddingLeft;
+
+        clone.style.position = 'absolute';
+        clone.style.left = '0';
+        clone.style.right = '0';
+        clone.style.top = 'auto';
+        clone.style.bottom = bottom;
+        clone.style.transform = 'none';
+        clone.style.margin = '0 auto';
+        clone.style.width = '100%';
+        clone.style.maxWidth = '100%';
+        clone.style.display = 'flex';
+        clone.style.flexWrap = wrap;
+        clone.style.justifyContent = justifyContent || 'center';
+        clone.style.alignItems = alignItems;
+        clone.style.alignContent = alignContent;
+        clone.style.gap = gap;
+        clone.style.columnGap = gap;
+        clone.style.rowGap = gap;
+        clone.style.pointerEvents = 'none';
+        clone.style.zIndex = '120';
+        clone.style.textAlign = 'center';
+        clone.style.boxSizing = 'border-box';
+        clone.style.paddingLeft = paddingLeft;
+        clone.style.paddingRight = paddingRight;
+      }
+
       return clone;
     };
 
@@ -1064,6 +1127,7 @@ function readPanelToConfig(){
         let tagsCloneForSlide = null;
 
         Array.from(stage.children).forEach((paneEl) => {
+          if (paneEl === tagsLayer) return;
           const paneClone = cloneNodeWithInlineStyles(paneEl, { removeIds: true });
           if (!paneClone) return;
           paneClone.innerHTML = '';
