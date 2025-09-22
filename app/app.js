@@ -414,7 +414,9 @@
 
     applyImageZoom(s, dom); // Apply initial image zoom
 
-    return renderSpecialBlocks(bodyEl);
+    const renderPromise = renderSpecialBlocks(bodyEl);
+    dom.__renderPromise = renderPromise;
+    return renderPromise;
   }
 
   function setContentForImage(dom, s){
@@ -459,17 +461,19 @@ function updateFoldOverlayForSlide(s){
     const s = slides[i];
 
     const tagsContainer = document.getElementById('tags');
-    tagsContainer.innerHTML = '';
-    if (s.tags && s.tags.length > 0) {
-      const tagsWrapper = document.createElement('div');
-      tagsWrapper.className = 'tags-container';
-      s.tags.forEach(tag => {
-        const tagElement = document.createElement('span');
-        tagElement.className = 'tag-item';
-        tagElement.textContent = tag;
-        tagsWrapper.appendChild(tagElement);
-      });
-      tagsContainer.appendChild(tagsWrapper);
+    if (tagsContainer) {
+      tagsContainer.innerHTML = '';
+      if (s.tags && s.tags.length > 0) {
+        const tagsWrapper = document.createElement('div');
+        tagsWrapper.className = 'tags-container';
+        s.tags.forEach(tag => {
+          const tagElement = document.createElement('span');
+          tagElement.className = 'tag-item';
+          tagElement.textContent = tag;
+          tagsWrapper.appendChild(tagElement);
+        });
+        tagsContainer.appendChild(tagsWrapper);
+      }
     }
 
     const imagePane = (cfg.imageSide === 'left') ? P1[0].parentElement : P2[0].parentElement;
@@ -850,192 +854,247 @@ function readPanelToConfig(){
   async function exportToHtml() {
     alert('La préparation du téléchargement commence. Le traitement des images en un seul fichier peut prendre quelques instants...');
 
-    try {
-      // --- Helper Functions ---
-      const imageToDataUri = async (url) => {
-        if (!url || isData(url)) return url;
-        try {
-          const response = await fetch(url);
-          if (!response.ok) throw new Error(`Failed to fetch image: ${url}`);
-          const blob = await response.blob();
-          return await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        } catch (error) {
-          console.warn(`Could not convert image to Data URI, using original URL as fallback: ${url}`, error);
-          return url;
-        }
-      };
+    const waitUntil = (predicate) => new Promise(resolve => {
+      const check = () => predicate() ? resolve() : requestAnimationFrame(check);
+      check();
+    });
 
-      function getLogoPositionStyle(config) {
-        const m = (config.logoMargin || 16) + 'px';
-        switch (config.logoCorner) {
-          case 'tr': return `top: ${m}; right: ${m};`;
-          case 'br': return `bottom: ${m}; right: ${m};`;
-          case 'bl': return `bottom: ${m}; left: ${m};`;
-          case 'tl':
-          default: return `top: ${m}; left: ${m};`;
-        }
+    const cloneNodeWithInlineStyles = (node, options = {}) => {
+      if (!node) return null;
+      if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.textContent || '');
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return null;
       }
 
-      const urlToDataUriMap = new Map();
-      const convertUrlToDataUri = async (url) => {
-        if (!url || isData(url)) return url;
-        let normalized = url;
-        if (!isHttp(normalized) && !/^presentation\//i.test(normalized)) {
-          normalized = resolveSrc(normalized);
-        }
-        if (urlToDataUriMap.has(normalized)) {
-          return urlToDataUriMap.get(normalized);
-        }
-        const dataUri = await imageToDataUri(normalized);
-        urlToDataUriMap.set(normalized, dataUri);
-        return dataUri;
-      };
+      const { removeIds = false } = options;
+      const clone = node.cloneNode(false);
+      if (removeIds && clone.hasAttribute('id')) clone.removeAttribute('id');
 
-      const slidesWithDataUri = await Promise.all(slides.map(async (slide) => {
+      const computed = window.getComputedStyle(node);
+      const styleParts = [];
+      for (const prop of computed) {
+        const value = computed.getPropertyValue(prop);
+        if (value) styleParts.push(`${prop}:${value};`);
+      }
+      if (styleParts.length) clone.setAttribute('style', styleParts.join(''));
+
+      for (const child of node.childNodes) {
+        const clonedChild = cloneNodeWithInlineStyles(child, options);
+        if (clonedChild) clone.appendChild(clonedChild);
+      }
+
+      return clone;
+    };
+
+    const convertInlineImages = async (container, convertUrl) => {
+      if (!container) return;
+      const images = Array.from(container.querySelectorAll('img'));
+      for (const img of images) {
+        const src = img.getAttribute('src');
+        if (!src || isData(src)) continue;
+        const dataUri = await convertUrl(src);
+        if (dataUri) img.setAttribute('src', dataUri);
+      }
+    };
+
+    const createTagsCloneForSlide = (slideData, referencePane, cloneFn) => {
+      if (!slideData || !Array.isArray(slideData.tags) || !slideData.tags.length) return null;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'text-pane' + (referencePane && referencePane.classList.contains('center') ? ' center' : '');
+      wrapper.style.position = 'fixed';
+      wrapper.style.opacity = '0';
+      wrapper.style.pointerEvents = 'none';
+      wrapper.style.zIndex = '-1';
+      wrapper.style.inset = '0';
+      document.body.appendChild(wrapper);
+
+      const tagsContainer = document.createElement('div');
+      tagsContainer.className = 'tags-container';
+      slideData.tags.forEach(tag => {
+        const tagElement = document.createElement('span');
+        tagElement.className = 'tag-item';
+        tagElement.textContent = tag;
+        tagsContainer.appendChild(tagElement);
+      });
+      wrapper.appendChild(tagsContainer);
+
+      const clone = cloneFn(tagsContainer, { removeIds: true });
+      wrapper.remove();
+      return clone;
+    };
+
+    const imageToDataUri = async (url) => {
+      if (!url || isData(url)) return url;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch image: ${url}`);
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.warn(`Could not convert image to Data URI, using original URL as fallback: ${url}`, error);
+        return url;
+      }
+    };
+
+    function getLogoPositionStyle(config) {
+      const m = (config.logoMargin || 16) + 'px';
+      switch (config.logoCorner) {
+        case 'tr': return `top: ${m}; right: ${m};`;
+        case 'br': return `bottom: ${m}; right: ${m};`;
+        case 'bl': return `bottom: ${m}; left: ${m};`;
+        case 'tl':
+        default: return `top: ${m}; left: ${m};`;
+      }
+    }
+
+    const urlToDataUriMap = new Map();
+    const convertUrlToDataUri = async (url) => {
+      if (!url || isData(url)) return url;
+      let normalized = url;
+      if (!isHttp(normalized) && !isData(normalized) && !/^presentation\//i.test(normalized) && !/^app\//i.test(normalized)) {
+        normalized = resolveSrc(normalized);
+      }
+      if (urlToDataUriMap.has(normalized)) {
+        return urlToDataUriMap.get(normalized);
+      }
+      const dataUri = await imageToDataUri(normalized);
+      urlToDataUriMap.set(normalized, dataUri);
+      return dataUri;
+    };
+
+    const originalSlides = slides;
+    const originalIdx = idx;
+    let replacedSlides = false;
+
+    let slidesForExport = [];
+    let slidesHtml = [];
+    let invertFlags = [];
+    let foldFlags = [];
+    let logoDataUri = null;
+    let foldDataUri = null;
+
+    try {
+      slidesForExport = await Promise.all(slides.map(async (slide) => {
         const clone = { ...slide };
+        if (Array.isArray(slide.tags)) {
+          clone.tags = [...slide.tags];
+        }
         if (clone.image) {
           clone.image = await convertUrlToDataUri(clone.image);
         }
         return clone;
       }));
 
-      const logoDataUri = cfg.logoUrl ? await convertUrlToDataUri(cfg.logoUrl) : null;
-
-      const workingRoot = document.createElement('div');
-      Object.assign(workingRoot.style, {
-        position: 'fixed',
-        pointerEvents: 'none',
-        opacity: '0',
-        visibility: 'hidden',
-        top: '0',
-        left: '0',
-        width: '0',
-        height: '0',
-        zIndex: '-1'
-      });
-      document.body.appendChild(workingRoot);
-
-      const slidesHtml = [];
-
-      for (let i = 0; i < slidesWithDataUri.length; i++) {
-        const slideData = slidesWithDataUri[i];
-        const slideEl = document.createElement('div');
-        slideEl.classList.add('slide');
-        slideEl.id = `slide-${i}`;
-        slideEl.style.display = i === 0 ? 'grid' : 'none';
-        if (i === 0) {
-          slideEl.classList.add('active');
-        }
-
-        const contentOnly = slideIsContentOnly(slideData);
-        const imageOnly = slideIsImageOnly(slideData);
-
-        const imagePane = document.createElement('div');
-        imagePane.classList.add('pane', 'image-pane');
-
-        const textPane = document.createElement('div');
-        textPane.classList.add('pane', 'text-pane');
-        if (contentOnly) textPane.classList.add('center');
-
-        if (cfg.imageSide === 'left') {
-          slideEl.append(imagePane, textPane);
-        } else {
-          slideEl.append(textPane, imagePane);
-        }
-
-        workingRoot.appendChild(slideEl);
-
-        setContentForImage(imagePane, slideData);
-        const renderPromise = setContentForText(textPane, slideData);
-
-        textPane.style.transform = `scale(${slideData.zoom || 1})`;
-        applySlideCustomStyles(slideData, textPane);
-
-        slideEl.style.gridTemplateColumns = (imageOnly || contentOnly) ? '1fr' : '1fr 1fr';
-        if (imageOnly) {
-          textPane.style.display = 'none';
-        } else if (contentOnly) {
-          imagePane.style.display = 'none';
-        }
-
-        if (renderPromise && typeof renderPromise.then === 'function') {
-          await renderPromise;
-        }
-
-        const inlineImages = Array.from(textPane.querySelectorAll('img'));
-        await Promise.all(inlineImages.map(async (img) => {
-          const src = img.getAttribute('src');
-          if (!src) return;
-          const dataUri = await convertUrlToDataUri(src);
-          if (dataUri) {
-            img.setAttribute('src', dataUri);
-          }
-        }));
-
-        slidesHtml.push(slideEl.outerHTML);
+      if (!slidesForExport.length) {
+        throw new Error('Aucune diapositive disponible pour export.');
       }
 
-      workingRoot.remove();
+      logoDataUri = cfg.logoUrl ? await convertUrlToDataUri(cfg.logoUrl) : null;
+      const foldSrc = foldImg ? foldImg.getAttribute('src') : null;
+      foldDataUri = (cfg.showFoldImage && foldSrc) ? await convertUrlToDataUri(foldSrc) : null;
 
-      const initialSlide = slidesWithDataUri[0] || {};
+      slides = slidesForExport;
+      replacedSlides = true;
+
+      invertFlags = slidesForExport.map(s => !!s.invert);
+      foldFlags = slidesForExport.map(s => !!(cfg.showFoldImage && s.image && slideHasContent(s)));
+
+      slidesHtml = [];
+
+      for (let i = 0; i < slidesForExport.length; i++) {
+        await waitUntil(() => !busy);
+        const direction = i === idx ? 0 : (i > idx ? 1 : -1);
+        show(i, direction);
+        await waitUntil(() => !busy && idx === i);
+
+        const imageBuffers = (cfg.imageSide === 'left') ? P1 : P2;
+        const textBuffers = (cfg.imageSide === 'left') ? P2 : P1;
+        const imagePane = imageBuffers[active] || null;
+        const textPane = textBuffers[active] || null;
+
+        if (textPane && textPane.__renderPromise && typeof textPane.__renderPromise.then === 'function') {
+          try {
+            await textPane.__renderPromise;
+          } catch (err) {
+            console.warn("Erreur de rendu lors de l'export:", err);
+          }
+        }
+
+        await convertInlineImages(textPane, convertUrlToDataUri);
+
+        const stageComputed = window.getComputedStyle(stage);
+        const slideClone = document.createElement('div');
+        slideClone.className = 'slide';
+        if (i === 0) slideClone.classList.add('active');
+        slideClone.dataset.index = String(i);
+        slideClone.dataset.invert = invertFlags[i] ? 'true' : 'false';
+        slideClone.dataset.fold = foldFlags[i] ? 'true' : 'false';
+
+        slideClone.style.width = '100%';
+        slideClone.style.height = '100%';
+        slideClone.style.display = stageComputed.getPropertyValue('display') || 'grid';
+        const gridCols = stageComputed.getPropertyValue('grid-template-columns');
+        if (gridCols) slideClone.style.gridTemplateColumns = gridCols;
+        const gridRows = stageComputed.getPropertyValue('grid-template-rows');
+        if (gridRows) slideClone.style.gridTemplateRows = gridRows;
+        const alignItems = stageComputed.getPropertyValue('align-items');
+        if (alignItems) slideClone.style.alignItems = alignItems;
+        const justifyItems = stageComputed.getPropertyValue('justify-items');
+        if (justifyItems) slideClone.style.justifyItems = justifyItems;
+        const gap = stageComputed.getPropertyValue('gap');
+        if (gap) slideClone.style.gap = gap;
+        const padding = stageComputed.getPropertyValue('padding');
+        if (padding) slideClone.style.padding = padding;
+
+        Array.from(stage.children).forEach((paneEl) => {
+          const paneClone = cloneNodeWithInlineStyles(paneEl, { removeIds: true });
+          if (!paneClone) return;
+          paneClone.innerHTML = '';
+
+          const paneBuffers = Array.from(paneEl.children);
+          const activeBuffer = paneBuffers[active];
+          if (activeBuffer) {
+            const bufferClone = cloneNodeWithInlineStyles(activeBuffer, { removeIds: true });
+            if (bufferClone && bufferClone.classList && bufferClone.classList.contains('text-pane')) {
+              const tagsClone = createTagsCloneForSlide(slidesForExport[i], textPane, cloneNodeWithInlineStyles);
+              if (tagsClone) bufferClone.appendChild(tagsClone);
+            }
+            if (bufferClone) paneClone.appendChild(bufferClone);
+          }
+
+          slideClone.appendChild(paneClone);
+        });
+
+        slidesHtml.push(slideClone.outerHTML);
+      }
+
       const googleFontsLink = cfg.googleFonts && cfg.googleFonts.length
         ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${cfg.googleFonts.map(f => 'family='+f.trim().replace(/\s+/g,'+')).join('&')}&display=swap">`
         : '';
 
       const dynamicStyles = `
         :root {
-          --bg: ${initialSlide.invert ? cfg.textColor : cfg.background};
-          --text: ${initialSlide.invert ? cfg.background : cfg.textColor};
-          --title-color: ${cfg.titleColor};
-          --accent: ${cfg.accentColor};
-          --bold-text-color: ${cfg.boldColor};
-          --title-size: ${cfg.titleSize}px;
-          --subtitle-size: ${cfg.subtitleSize}px;
-          --body-size: ${cfg.bodySize}px;
-          --line: ${cfg.lineHeight};
-          --gutter: ${cfg.gutter}px;
-          --speed: 800ms;
-          --easing: cubic-bezier(0.16,1,0.3,1);
-          --title-font: ${cfg.titleFont};
-          --body-font: ${cfg.bodyFont};
+          --bg: ${cfg.background};
+          --text: ${cfg.textColor};
+          --speed: ${cfg.speed}ms;
+          --easing: ${cfg.easing === 'linear' ? 'linear' : 'cubic-bezier(0.16,1,0.3,1)'};
         }
       `;
 
       const staticCss = `
         html, body { height: 100%; margin: 0; overflow: hidden; }
-        body { background: var(--bg); color: var(--text); font-family: var(--body-font); transition: background-color var(--speed) var(--easing), color var(--speed) var(--easing); }
+        body { background: var(--bg); color: var(--text); font-family: ${cfg.bodyFont}; transition: background-color var(--speed) var(--easing), color var(--speed) var(--easing); }
         #stage { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
-        .slide { position: absolute; inset: 0; opacity: 0; transition: opacity calc(var(--speed) / 2) var(--easing); pointer-events: none; }
-        .slide.active { opacity: 1; z-index: 1; pointer-events: auto; }
-        .pane { position: relative; overflow: hidden; }
-        .image-pane { background-position: center; background-repeat: no-repeat; background-size: cover; }
-        .text-pane { display: grid; grid-template-rows: auto auto 1fr; padding: 40px 32px; transform-origin: top left; }
-        .text-pane.center { place-items: center; align-content: center; justify-items: center; grid-template-rows: auto auto auto; text-align: center; transform-origin: center; padding: 40px; padding-left: 0; padding-right: 0; }
-        .title { font-size: var(--title-size); line-height: 0.95; font-weight: 700; letter-spacing: -0.5px; font-family: var(--title-font); color: var(--title-color); margin-bottom: 8px; }
-        .subtitle { font-size: var(--subtitle-size); opacity: 0.85; margin-top: 0; font-family: var(--body-font); color: var(--text); }
-        .body { margin-top: var(--gutter); font-size: var(--body-size); line-height: var(--line); align-self: start; justify-self: center; width: 100%; max-width: 780px; font-family: var(--body-font); color: var(--text); }
-        .text-pane.center .body { display: flex; flex-direction: column; align-items: center; width: 100%; }
-        .text-pane.center .body > * { width: 100%; }
-        .text-pane.center .md pre { align-self: center; margin-left: auto; margin-right: auto; text-align: left; width: auto; max-width: 100%; }
-        .text-pane.center .md pre code { text-align: left; display: block; }
-        .body p { margin: 0 0 calc(var(--gutter) / 2); }
-        strong, b { color: var(--bold-text-color); }
-        em, i { color: var(--accent); font-style: italic; }
-        .md blockquote { border-left: 4px solid var(--accent); padding-left: 12px; margin: 12px 0; opacity: 0.95; }
-        .md table { border-collapse: collapse; width: 100%; }
-        .md th, .md td { border: 1px solid #ffffff33; padding: 6px 10px; text-align: left; }
-        .md img { max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: 8px; }
-        .md pre { background-color: #282c34; color: #abb2bf; padding: 1em; border-radius: 8px; overflow-x: auto; font-family: 'Fira Code', 'Courier New', Courier, monospace; font-size: 0.9em; text-align: left; }
-        .md code:not(pre code) { background-color: #282c34; color: #abb2bf; padding: .2em .4em; border-radius: 4px; font-size: 0.9em; }
-        .md pre code { background-color: transparent; padding: 0; color: inherit; font-size: inherit; text-align: left; display: block; }
-        .md .mermaid { display: block; margin: 1.5em 0; }
-        .vspace { width: 100%; }
-        img { max-width: 100%; border-radius: 8px; height: auto; }
+        .slide { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity calc(var(--speed) / 2) var(--easing); }
+        .slide.active { opacity: 1; pointer-events: auto; z-index: 1; }
         #brandLogo { position: fixed; z-index: 200; pointer-events: none; }
         #blackout, #whiteout { position: fixed; inset: 0; pointer-events: none; z-index: 300; opacity: 0; transition: opacity 300ms ease; }
         #blackout { background: #000; }
@@ -1043,65 +1102,81 @@ function readPanelToConfig(){
         body.cover-black #blackout { opacity: 1; }
         body.cover-white #whiteout { opacity: 1; }
         body.is-fullscreen #brandLogo { display: block !important; }
+        #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 180; }
+        #foldImage { position: fixed; bottom: 0; right: 0; pointer-events: none; z-index: 150; height: 100vh; width: auto; transition: opacity var(--speed) var(--easing); mix-blend-mode: multiply; }
       `;
 
+      const foldOpacity = clamp(cfg.foldImageOpacity, 0, 1);
+      const vignetteStyle = cfg.vignette
+        ? `radial-gradient(ellipse at center, rgba(0,0,0,0) ${Math.round((1-cfg.vignetteStrength)*100)}%, rgba(0,0,0,${cfg.vignetteStrength}) 100%)`
+        : 'none';
+      const foldInlineStyle = foldDataUri
+        ? `${foldFlags[0] ? 'display: block;' : 'display: none;'} opacity: ${foldFlags[0] ? foldOpacity : 0};`
+        : '';
+
       const interactivityScript = `
-        const slides = document.querySelectorAll('.slide');
-        const slideInvert = ${JSON.stringify(slidesWithDataUri.map(s => !!s.invert))};
-        const slideColors = { bg: '${cfg.background}', text: '${cfg.textColor}' };
-        let idx = 0;
+        (function(){
+          const slides = Array.from(document.querySelectorAll('.slide'));
+          const slideInvert = ${JSON.stringify(invertFlags)};
+          const foldStates = ${JSON.stringify(foldFlags)};
+          const colors = { bg: '${cfg.background}', text: '${cfg.textColor}' };
+          const foldImage = document.getElementById('foldImage');
+          const foldOpacity = ${clamp(cfg.foldImageOpacity, 0, 1)};
+          let idx = 0;
 
-        function applySlideTheme(i) {
-            const root = document.documentElement.style;
+          function applySlideTheme(i) {
             const invert = slideInvert[i];
-            root.setProperty('--bg', invert ? slideColors.text : slideColors.bg);
-            root.setProperty('--text', invert ? slideColors.bg : slideColors.text);
-        }
+            document.body.style.background = invert ? colors.text : colors.bg;
+            document.body.style.color = invert ? colors.bg : colors.text;
+            if (foldImage) {
+              const visible = foldStates[i];
+              foldImage.style.display = visible ? 'block' : 'none';
+              foldImage.style.opacity = visible ? String(foldOpacity) : '0';
+            }
+          }
 
-        function show(i) {
+          function show(i) {
             if (i < 0 || i >= slides.length || i === idx) return;
             const current = slides[idx];
             const next = slides[i];
-
-            if (current) {
-                current.classList.remove('active');
-                setTimeout(() => { current.style.display = 'none'; }, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--speed')));
-            }
-            if (next) {
-                applySlideTheme(i);
-                next.style.display = 'grid';
-                requestAnimationFrame(() => { next.classList.add('active'); });
-            }
+            if (current) current.classList.remove('active');
+            if (next) next.classList.add('active');
+            applySlideTheme(i);
             idx = i;
-        }
+          }
 
-        function toggleBlack(){ document.body.classList.toggle('cover-black'); document.body.classList.remove('cover-white'); }
-        function toggleWhite(){ document.body.classList.toggle('cover-white'); document.body.classList.remove('cover-black'); }
-        function clearCovers(){ document.body.classList.remove('cover-black','cover-white'); }
-
-        async function toggleFullscreen(){
+          function toggleBlack(){ document.body.classList.toggle('cover-black'); document.body.classList.remove('cover-white'); }
+          function toggleWhite(){ document.body.classList.toggle('cover-white'); document.body.classList.remove('cover-black'); }
+          function clearCovers(){ document.body.classList.remove('cover-black','cover-white'); }
+          async function toggleFullscreen(){
             try {
-                if (document.fullscreenElement) await document.exitFullscreen();
-                else await document.documentElement.requestFullscreen();
+              if (document.fullscreenElement) await document.exitFullscreen();
+              else await document.documentElement.requestFullscreen();
             } catch(e) { console.warn('Fullscreen error', e); }
-        }
+          }
 
-        document.addEventListener('keydown', e => {
-            const k = e.key.toLowerCase();
-            if (k === 'arrowright' || k === 'pagedown' || k === ' ') show(idx + 1);
-            else if (k === 'arrowleft' || k === 'pageup') show(idx - 1);
-            else if (k === 'f') toggleFullscreen();
-            else if (k === 'b') toggleBlack();
-            else if (k === 'w') toggleWhite();
-            else if (k === 'escape') clearCovers();
-        });
+          document.addEventListener('keydown', e => {
+            const tag = (e.target && e.target.tagName || '').toUpperCase();
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            const key = e.key.toLowerCase();
+            if (key === 'arrowright' || key === 'pagedown' || key === ' ') { e.preventDefault(); show(idx + 1); }
+            else if (key === 'arrowleft' || key === 'pageup') { e.preventDefault(); show(idx - 1); }
+            else if (key === 'b') toggleBlack();
+            else if (key === 'w') toggleWhite();
+            else if (key === 'escape') clearCovers();
+            else if (key === 'f') toggleFullscreen();
+          });
 
-        document.addEventListener('click', e => {
+          document.addEventListener('click', e => {
             if (e.clientX < window.innerWidth / 3) show(idx - 1);
             else if (e.clientX > window.innerWidth * 2 / 3) show(idx + 1);
-        });
+          });
 
-        show(0);
+          if (slides[0]) {
+            slides[0].classList.add('active');
+            applySlideTheme(0);
+          }
+        })();
       `;
 
       const logoInlineStyle = logoDataUri
@@ -1110,29 +1185,57 @@ function readPanelToConfig(){
 
       const finalHtml = `
         <!DOCTYPE html>
+
         <html lang="fr">
+
         <head>
+
           <meta charset="UTF-8">
+
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
           <title>Présentation</title>
+
           ${googleFontsLink}
+
           <style>
+
             ${dynamicStyles}
+
             ${staticCss}
+
           </style>
+
         </head>
+
         <body>
+
           <div id="stage">
+
             ${slidesHtml.join('\n')}
+
           </div>
+
           ${logoDataUri ? `<img id="brandLogo" src="${logoDataUri}" style="${logoInlineStyle}" alt="Logo">` : ''}
+
+          <div id="vignette" style="background: ${vignetteStyle};"></div>
+
+          ${foldDataUri ? `<img id="foldImage" src="${foldDataUri}" style="${foldInlineStyle}" alt="Fold">` : ''}
+
           <div id="blackout"></div>
+
           <div id="whiteout"></div>
+
           <script>
+
             ${interactivityScript}
+
           </script>
+
         </body>
+
         </html>
+
       `;
 
       const blob = new Blob([finalHtml.trim()], { type: 'text/html' });
@@ -1140,14 +1243,22 @@ function readPanelToConfig(){
       a.href = URL.createObjectURL(blob);
       a.download = 'presentation.html';
       a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 500);
+      setTimeout(() => URL.revokeObjectURL(a.href), 500);
 
       alert('Téléchargement terminé ! Le fichier HTML est entièrement autonome.');
-
     } catch (error) {
-      console.error("Erreur lors de la création du fichier de présentation :", error);
-      alert("Une erreur est survenue lors de la préparation du téléchargement. Veuillez vérifier la console pour plus de détails.");
+      console.error('Erreur lors de la création du fichier de présentation :', error);
+      alert('Une erreur est survenue lors de la préparation du téléchargement. Veuillez vérifier la console pour plus de détails.');
+    } finally {
+      if (replacedSlides) {
+        await waitUntil(() => !busy);
+        slides = originalSlides;
+        if (originalSlides && originalSlides.length) {
+          show(Math.min(originalIdx, originalSlides.length - 1), 0);
+        }
+      }
     }
   }
+
 
 })();
