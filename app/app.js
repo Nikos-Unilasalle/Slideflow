@@ -143,7 +143,7 @@
     });
 
     // Convert custom [filename.ext] syntax to standard Markdown image syntax
-    let preprocessedMd = preprocessedWithCodePlaceholders.replace(/\ \[([^\]]+)\](?!\()/g, (match, filename) => {
+    let preprocessedMd = preprocessedWithCodePlaceholders.replace(/\[([^\]]+)\](?!\()/g, (match, filename) => {
         return `![](${filename.trim()})`;
     });
 
