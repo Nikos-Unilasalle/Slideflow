@@ -69,26 +69,6 @@
   const logoImg = document.getElementById('brandLogo');
   const foldImg = document.getElementById('foldImage');
 
-  let tagsLayer = document.getElementById('tags');
-  if (!tagsLayer) {
-    tagsLayer = document.createElement('div');
-    tagsLayer.id = 'tags';
-    tagsLayer.setAttribute('aria-hidden', 'true');
-    stage.appendChild(tagsLayer);
-  }
-  if (tagsLayer) {
-    tagsLayer.style.position = 'absolute';
-    tagsLayer.style.inset = '0';
-    tagsLayer.style.pointerEvents = 'none';
-    tagsLayer.style.zIndex = '120';
-    tagsLayer.style.margin = '0';
-    tagsLayer.style.padding = '0';
-    tagsLayer.style.boxSizing = 'border-box';
-    tagsLayer.style.display = 'block';
-    tagsLayer.style.gridColumn = '1 / -1';
-    tagsLayer.style.gridRow = '1 / -1';
-  }
-
   const P1 = [document.getElementById('B1-0'), document.getElementById('B1-1')];
   const P2 = [document.getElementById('B2-0'), document.getElementById('B2-1')];
   const allBuffers = [...P1, ...P2];
@@ -163,7 +143,7 @@
     });
 
     // Convert custom [filename.ext] syntax to standard Markdown image syntax
-    let preprocessedMd = preprocessedWithCodePlaceholders.replace(/\[([^\]]+)\](?!\()/g, (match, filename) => {
+    let preprocessedMd = preprocessedWithCodePlaceholders.replace(/\ \[([^\]]+)\](?!\()/g, (match, filename) => {
         return `![](${filename.trim()})`;
     });
 
@@ -323,7 +303,7 @@
 
   function parseSlide(chunk){
     // 1. Initialiser toutes les variables, y compris 'tags'
-    let image = "", invert = false, zoom = 1, originalImage = "", v_margin = 0, h_margin = 0, tags = [];
+    let image = "", video = "", invert = false, zoom = 1, originalImage = "", originalVideo = "", v_margin = 0, h_margin = 0, tags = [], transition = "";
     let rawContent = chunk; // Par défaut, le contenu brut est tout le chunk
 
     const fm = chunk.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
@@ -336,6 +316,9 @@
         // Extraction de toutes les données
         originalImage = data.image || data.img || data.cover || "";
         image = resolveSrc(originalImage);
+        originalVideo = data.video || "";
+        video = resolveSrc(originalVideo);
+        transition = data.transition || "";
 
         const themeStr = String((data.theme || data.mode || '') || '').toLowerCase();
         invert = !!(data.invert || data.light || themeStr === 'light');
@@ -370,10 +353,10 @@
     const body = rest.join('\n');
 
     // 4. On retourne TOUTES les données, y compris les tags
-    return { image, originalImage, title, subtitle, body, invert, vShiftUnits, zoom, v_margin, h_margin, rawContent, tags };
+    return { image, originalImage, video, originalVideo, title, subtitle, body, invert, vShiftUnits, zoom, v_margin, h_margin, rawContent, tags, transition };
   }
-  function slideIsImageOnly(s){ return (!!s.image) && (!s.title?.trim()) && (!s.subtitle?.trim()) && (!s.body?.trim()); }
-  function slideIsContentOnly(s){ return (!s.image) && (s.title?.trim() || s.subtitle?.trim() || s.body?.trim()); }
+  function slideIsImageOnly(s){ return (!!s.image || !!s.video) && (!s.title?.trim()) && (!s.subtitle?.trim()) && (!s.body?.trim()); }
+  function slideIsContentOnly(s){ return (!s.image && !s.video) && (s.title?.trim() || s.subtitle?.trim() || s.body?.trim()); }
 
   function applyImageZoom(s, dom) {
     const bodyEl = dom.querySelector('.body');
@@ -434,14 +417,26 @@
 
     applyImageZoom(s, dom); // Apply initial image zoom
 
-    const renderPromise = renderSpecialBlocks(bodyEl);
-    dom.__renderPromise = renderPromise;
-    return renderPromise;
+    return renderSpecialBlocks(bodyEl);
   }
 
   function setContentForImage(dom, s){
-    dom.innerHTML = '';
-    if (s.image) {
+    dom.innerHTML = ''; // Clear previous content (like old videos)
+    if (s.video) {
+      const video = document.createElement('video');
+      video.src = s.video;
+      video.style.position = 'absolute';
+      video.style.top = '0';
+      video.style.left = '0';
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.objectFit = 'cover';
+      video.autoplay = true;
+      video.muted = true; // Important for autoplay
+      video.loop = false;
+      dom.appendChild(video);
+      dom.style.backgroundImage = 'none';
+    } else if (s.image) {
       dom.style.backgroundImage = `url('${s.image}')`;
     } else {
       dom.style.backgroundImage = 'none';
@@ -467,7 +462,7 @@
 
 function updateFoldOverlayForSlide(s){
   if (!s) return;
-  const hasImg = !!s.image;
+  const hasImg = !!s.image || !!s.video;
   const hasContent = slideHasContent(s);
   const on = !!(cfg.showFoldImage && hasImg && hasContent);
   if (!foldImg) return;
@@ -477,34 +472,34 @@ function updateFoldOverlayForSlide(s){
 
   function show(i,dir=1){
     if(busy) return; busy=true; i = clamp(i,0,slides.length-1);
-    const nextBuf = 1 - active;
     const s = slides[i];
+    const transitionType = s.transition || 'slide';
 
-    if (tagsLayer) {
-      tagsLayer.innerHTML = '';
-      if (s.tags && s.tags.length > 0) {
-        const tagsWrapper = document.createElement('div');
-        tagsWrapper.className = 'tags-container';
-        s.tags.forEach(tag => {
-          const tagElement = document.createElement('span');
-          tagElement.className = 'tag-item';
-          tagElement.textContent = tag;
-          tagsWrapper.appendChild(tagElement);
-        });
-        tagsLayer.appendChild(tagsWrapper);
-      }
+    const tagsContainer = document.getElementById('tags');
+    tagsContainer.innerHTML = '';
+    if (s.tags && s.tags.length > 0) {
+      const tagsWrapper = document.createElement('div');
+      tagsWrapper.className = 'tags-container';
+      s.tags.forEach(tag => {
+        const tagElement = document.createElement('span');
+        tagElement.className = 'tag-item';
+        tagElement.textContent = tag;
+        tagsWrapper.appendChild(tagElement);
+      });
+      tagsContainer.appendChild(tagsWrapper);
     }
 
+    const nextBuf = 1 - active;
     const imagePane = (cfg.imageSide === 'left') ? P1[0].parentElement : P2[0].parentElement;
     const textPane = (cfg.imageSide === 'left') ? P2[0].parentElement : P1[0].parentElement;
     const imageBuffers = (cfg.imageSide === 'left') ? P1 : P2;
     const textBuffers = (cfg.imageSide === 'left') ? P2 : P1;
-
     const nextImageBuffer = imageBuffers[nextBuf];
     const nextTextBuffer = textBuffers[nextBuf];
     const activeImageBuffer = imageBuffers[active];
     const activeTextBuffer = textBuffers[active];
 
+    // This part is common for both transitions, so we do it first.
     allBuffers.forEach(b => { b.className = 'pane-buffer'; b.style.transform = ''; });
     stage.style.gridTemplateColumns = '1fr 1fr';
     P1[0].parentElement.style.display = 'block';
@@ -536,37 +531,58 @@ function updateFoldOverlayForSlide(s){
 
     updateFoldOverlayForSlide(s);
 
-    allBuffers.forEach(b => b.style.zIndex = 1);
-    nextImageBuffer.style.zIndex = 2;
-    nextTextBuffer.style.zIndex = 2;
+    if (transitionType === 'fade') {
+        document.body.classList.add('cover-black');
+        setTimeout(() => {
+            // Hide old buffers
+            activeImageBuffer.style.opacity = 0;
+            activeTextBuffer.style.opacity = 0;
+            // Show new buffers
+            nextImageBuffer.style.opacity = 1;
+            nextTextBuffer.style.opacity = 1;
 
-    // Set initial positions for transition
-    nextImageBuffer.style.transform = `translateY(${dir * 100}%)`;
-    nextTextBuffer.style.transform = `translateX(${dir * 100}%)`;
-    nextImageBuffer.style.opacity = 1;
-    nextTextBuffer.style.opacity = 1;
+            idx = i;
+            active = nextBuf;
+            updateHUD();
 
-    requestAnimationFrame(() => {
-        // Animate outgoing elements
-        activeImageBuffer.style.transform = `translateY(${-dir * 100}%)`;
-        activeTextBuffer.style.transform = `translateX(${-dir * 100}%)`;
-        activeImageBuffer.style.opacity = 0;
-        activeTextBuffer.style.opacity = 0;
+            document.body.classList.remove('cover-black');
+            setTimeout(() => {
+                busy = false;
+            }, cfg.speed + 50);
+        }, cfg.speed + 50);
+    } else { // slide
+        allBuffers.forEach(b => b.style.zIndex = 1);
+        nextImageBuffer.style.zIndex = 2;
+        nextTextBuffer.style.zIndex = 2;
 
-        // Animate incoming elements
-        nextImageBuffer.style.transform = 'translateY(0)';
-        nextTextBuffer.style.transform = 'translateX(0)';
-    });
+        // Set initial positions for transition
+        nextImageBuffer.style.transform = `translateY(${dir * 100}%)`;
+        nextTextBuffer.style.transform = `translateX(${dir * 100}%)`;
+        nextImageBuffer.style.opacity = 1;
+        nextTextBuffer.style.opacity = 1;
 
-    setTimeout(() => {
-        idx = i;
-        active = nextBuf;
-        busy = false;
-        updateHUD();
-        // Reset transforms for the now hidden elements
-        activeImageBuffer.style.transform = '';
-        activeTextBuffer.style.transform = '';
-    }, cfg.speed + 50);
+        requestAnimationFrame(() => {
+            // Animate outgoing elements
+            activeImageBuffer.style.transform = `translateY(${-dir * 100}%)`;
+            activeTextBuffer.style.transform = `translateX(${-dir * 100}%)`;
+            activeImageBuffer.style.opacity = 0;
+            activeTextBuffer.style.opacity = 0;
+
+            // Animate incoming elements
+            nextImageBuffer.style.transform = 'translateY(0)';
+            nextTextBuffer.style.transform = 'translateX(0)';
+        });
+
+        setTimeout(() => {
+            idx = i;
+            active = nextBuf;
+            busy = false;
+            updateHUD();
+            // Reset transforms for the now hidden elements
+            activeImageBuffer.style.transform = '';
+            activeTextBuffer.style.transform = '';
+        }, cfg.speed + 50);
+    }
   }
 
   function updateHUD(){ pos.textContent = `${idx+1}/${slides.length||1}`; }
@@ -606,7 +622,7 @@ function initKeyboard(){
     if (tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT') return;
     const k = e.key.toLowerCase();
 
-    if (k === ' '){
+    if (k === ' '){ // Spacebar for cursor
       e.preventDefault();
       setSpaceCursor();
       return;
@@ -758,10 +774,12 @@ function readPanelToConfig(){
     return slides.map(s => {
       let frontmatter = {};
       if (s.originalImage) frontmatter.image = s.originalImage;
+      if (s.originalVideo) frontmatter.video = s.originalVideo;
       if (s.invert) frontmatter.invert = true;
       if (s.zoom && s.zoom != 1) frontmatter.zoom = Number(s.zoom.toFixed(2));
       if (s.v_margin && s.v_margin != 0) frontmatter.v_margin = s.v_margin;
       if (s.h_margin && s.h_margin != 0) frontmatter.h_margin = s.h_margin;
+      if (s.transition) frontmatter.transition = s.transition;
 
       let fmString = '';
       if (Object.keys(frontmatter).length > 0) {
@@ -852,7 +870,7 @@ function readPanelToConfig(){
         const newValue = parseInt(e.target.value, 10);
         slides[idx].v_margin = newValue;
         const textPane = (cfg.imageSide === 'left') ? P2[active] : P1[active];
-        applySlideCustomStyles(slides[idx], textPane);
+        applySlideCustomStyles(s, textPane); // s is not defined here, should be slides[idx]
     }
   });
 
@@ -861,7 +879,7 @@ function readPanelToConfig(){
         const newValue = parseInt(e.target.value, 10);
         slides[idx].h_margin = newValue;
         const textPane = (cfg.imageSide === 'left') ? P2[active] : P1[active];
-        applySlideCustomStyles(slides[idx], textPane);
+        applySlideCustomStyles(s, textPane); // s is not defined here, should be slides[idx]
     }
   });
 
@@ -873,445 +891,139 @@ function readPanelToConfig(){
   async function exportToHtml() {
     alert('La préparation du téléchargement commence. Le traitement des images en un seul fichier peut prendre quelques instants...');
 
-    const waitUntil = (predicate) => new Promise(resolve => {
-      const check = () => predicate() ? resolve() : requestAnimationFrame(check);
-      check();
-    });
-
-    const cloneNodeWithInlineStyles = (node, options = {}) => {
-      if (!node) return null;
-      if (node.nodeType === Node.TEXT_NODE) {
-        return document.createTextNode(node.textContent || '');
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) {
-        return null;
-      }
-
-      const { removeIds = false } = options;
-      const clone = node.cloneNode(false);
-      if (removeIds && clone.hasAttribute('id')) clone.removeAttribute('id');
-
-      const computed = window.getComputedStyle(node);
-      const styleParts = [];
-      for (const prop of computed) {
-        const value = computed.getPropertyValue(prop);
-        if (value) styleParts.push(`${prop}:${value};`);
-      }
-      if (styleParts.length) clone.setAttribute('style', styleParts.join(''));
-
-      for (const child of node.childNodes) {
-        const clonedChild = cloneNodeWithInlineStyles(child, options);
-        if (clonedChild) clone.appendChild(clonedChild);
-      }
-
-      return clone;
-    };
-
-    const convertInlineImages = async (container, convertUrl) => {
-      if (!container) return;
-      const images = Array.from(container.querySelectorAll('img'));
-      for (const img of images) {
-        const src = img.getAttribute('src');
-        if (!src || isData(src)) continue;
-        const dataUri = await convertUrl(src);
-        if (dataUri) img.setAttribute('src', dataUri);
-      }
-    };
-
-    const createTagsCloneForSlide = (slideData, referencePane, cloneFn) => {
-      if (!slideData || !Array.isArray(slideData.tags) || !slideData.tags.length) return null;
-
-      let nodeToClone = (tagsLayer && tagsLayer.firstElementChild) ? tagsLayer.firstElementChild : null;
-      let cleanup = null;
-
-      if (!nodeToClone) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'text-pane' + (referencePane && referencePane.classList.contains('center') ? ' center' : '');
-        wrapper.style.position = 'fixed';
-        wrapper.style.opacity = '0';
-        wrapper.style.pointerEvents = 'none';
-        wrapper.style.zIndex = '-1';
-        wrapper.style.inset = '0';
-
-        const tagsContainer = document.createElement('div');
-        tagsContainer.className = 'tags-container';
-        slideData.tags.forEach(tag => {
-          const tagElement = document.createElement('span');
-          tagElement.className = 'tag-item';
-          tagElement.textContent = tag;
-          tagsContainer.appendChild(tagElement);
-        });
-
-        wrapper.appendChild(tagsContainer);
-        document.body.appendChild(wrapper);
-
-        nodeToClone = tagsContainer;
-        cleanup = () => wrapper.remove();
-      }
-
-      if (!nodeToClone) return null;
-
-      const containerStyle = window.getComputedStyle(nodeToClone);
-      const clone = cloneFn(nodeToClone, { removeIds: true });
-
-      if (cleanup) cleanup();
-
-      if (clone && clone.style) {
-        const bottom = containerStyle.getPropertyValue('bottom') || '20px';
-        const gap = containerStyle.getPropertyValue('gap')
-          || containerStyle.getPropertyValue('column-gap')
-          || '8px';
-        const wrap = containerStyle.getPropertyValue('flex-wrap') || 'wrap';
-        const alignItems = containerStyle.getPropertyValue('align-items') || 'center';
-        const justifyContent = containerStyle.getPropertyValue('justify-content') || 'center';
-        const alignContent = containerStyle.getPropertyValue('align-content') || 'center';
-        const paddingLeft = containerStyle.getPropertyValue('padding-left') || '0px';
-        const paddingRight = containerStyle.getPropertyValue('padding-right') || paddingLeft;
-
-        clone.style.position = 'absolute';
-        clone.style.left = '0';
-        clone.style.right = '0';
-        clone.style.top = 'auto';
-        clone.style.bottom = bottom;
-        clone.style.transform = 'none';
-        clone.style.margin = '0 auto';
-        clone.style.width = '100%';
-        clone.style.maxWidth = '100%';
-        clone.style.display = 'flex';
-        clone.style.flexWrap = wrap;
-        clone.style.justifyContent = justifyContent || 'center';
-        clone.style.alignItems = alignItems;
-        clone.style.alignContent = alignContent;
-        clone.style.gap = gap;
-        clone.style.columnGap = gap;
-        clone.style.rowGap = gap;
-        clone.style.pointerEvents = 'none';
-        clone.style.zIndex = '120';
-        clone.style.textAlign = 'center';
-        clone.style.boxSizing = 'border-box';
-        clone.style.paddingLeft = paddingLeft;
-        clone.style.paddingRight = paddingRight;
-      }
-
-      return clone;
-    };
-
-    const imageToDataUri = async (url) => {
-      if (!url || isData(url)) return url;
-      try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Failed to fetch image: ${url}`);
-        const blob = await response.blob();
-        return await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } catch (error) {
-        console.warn(`Could not convert image to Data URI, using original URL as fallback: ${url}`, error);
-        return url;
-      }
-    };
-
-    function getLogoPositionStyle(config) {
-      const m = (config.logoMargin || 16) + 'px';
-      switch (config.logoCorner) {
-        case 'tr': return `top: ${m}; right: ${m};`;
-        case 'br': return `bottom: ${m}; right: ${m};`;
-        case 'bl': return `bottom: ${m}; left: ${m};`;
-        case 'tl':
-        default: return `top: ${m}; left: ${m};`;
-      }
-    }
-
-    const urlToDataUriMap = new Map();
-    const convertUrlToDataUri = async (url) => {
-      if (!url || isData(url)) return url;
-      let normalized = url;
-      if (!isHttp(normalized) && !isData(normalized) && !/^presentation\//i.test(normalized) && !/^app\//i.test(normalized)) {
-        normalized = resolveSrc(normalized);
-      }
-      if (urlToDataUriMap.has(normalized)) {
-        return urlToDataUriMap.get(normalized);
-      }
-      const dataUri = await imageToDataUri(normalized);
-      urlToDataUriMap.set(normalized, dataUri);
-      return dataUri;
-    };
-
-    const originalSlides = slides;
-    const originalIdx = idx;
-    let replacedSlides = false;
-
-    let slidesForExport = [];
-    let slidesHtml = [];
-    let invertFlags = [];
-    let foldFlags = [];
-    let logoDataUri = null;
-    let foldDataUri = null;
-
     try {
-      slidesForExport = await Promise.all(slides.map(async (slide) => {
-        const clone = { ...slide };
-        if (Array.isArray(slide.tags)) {
-          clone.tags = [...slide.tags];
+      console.log('exportToHtml started. cfg:', cfg);
+      console.log('exportToHtml started. slides:', slides);
+      // --- Helper Functions ---
+      const imageToDataUri = async (url) => {
+        if (!url || isData(url)) return url;
+        try {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`Failed to fetch image: ${url}`);
+          const blob = await response.blob();
+          return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          console.warn(`Could not convert image to Data URI, using original URL as fallback: ${url}`, error);
+          return url;
         }
+      };
+
+      function getLogoPositionStyle(config) {
+        const m = (config.logoMargin || 16) + 'px';
+        switch (config.logoCorner) {
+          case 'tr': return `top: ${m}; right: ${m};`;
+          case 'br': return `bottom: ${m}; right: ${m};`;
+          case 'bl': return `bottom: ${m}; left: ${m};`;
+          case 'tl':
+          default: return `top: ${m}; left: ${m};`;
+        }
+      }
+
+      const urlToDataUriMap = new Map();
+      const convertUrlToDataUri = async (url) => {
+        if (!url || isData(url)) return url;
+        let normalized = url;
+        if (!isHttp(normalized) && !/^presentation\//i.test(normalized)) {
+          normalized = resolveSrc(normalized);
+        }
+        if (urlToDataUriMap.has(normalized)) {
+          return urlToDataUriMap.get(normalized);
+        }
+        const dataUri = await imageToDataUri(normalized);
+        urlToDataUriMap.set(normalized, dataUri);
+        return dataUri;
+      };
+
+      function inlineAllStyles(element) {
+        const clone = element.cloneNode(true);
+        const allElements = clone.querySelectorAll('*');
+        const originalElements = element.querySelectorAll('*');
+
+        for (let i = 0; i < allElements.length; i++) {
+          const clonedEl = allElements[i];
+          const originalEl = originalElements[i];
+          const computedStyle = window.getComputedStyle(originalEl);
+          let style = '';
+          for (let j = 0; j < computedStyle.length; j++) {
+            const prop = computedStyle[j];
+            const value = computedStyle.getPropertyValue(prop);
+            // Exclude properties that might cause issues or are not necessary for static display
+            if (!['transition', 'animation', 'cursor', 'pointer-events', 'z-index'].includes(prop)) {
+              style += `${prop}: ${value};`;
+            }
+          }
+          clonedEl.setAttribute('style', style);
+        }
+        return clone.outerHTML;
+      }
+
+      const slidesWithDataUri = await Promise.all(slides.map(async (slide) => {
+        const clone = { ...slide };
         if (clone.image) {
           clone.image = await convertUrlToDataUri(clone.image);
         }
         return clone;
       }));
 
-      if (!slidesForExport.length) {
-        throw new Error('Aucune diapositive disponible pour export.');
-      }
+      const logoDataUri = cfg.logoUrl ? await convertUrlToDataUri(cfg.logoUrl) : null;
 
-      logoDataUri = cfg.logoUrl ? await convertUrlToDataUri(cfg.logoUrl) : null;
-      const foldSrc = foldImg ? foldImg.getAttribute('src') : null;
-      foldDataUri = (cfg.showFoldImage && foldSrc) ? await convertUrlToDataUri(foldSrc) : null;
+      // Read app/styles.css content
+      const appStylesCss = await fetch('app/styles.css').then(res => res.text());
 
-      slides = slidesForExport;
-      replacedSlides = true;
+      const slidesHtml = [];
 
-      invertFlags = slidesForExport.map(s => !!s.invert);
-      foldFlags = slidesForExport.map(s => !!(cfg.showFoldImage && s.image && slideHasContent(s)));
+      // Temporarily hide the UI elements to get a clean capture
+      document.body.classList.add('hide-ui');
 
-      slidesHtml = [];
-
-      for (let i = 0; i < slidesForExport.length; i++) {
-        await waitUntil(() => !busy);
-        const direction = i === idx ? 0 : (i > idx ? 1 : -1);
-        show(i, direction);
-        await waitUntil(() => !busy && idx === i);
-
-        const imageBuffers = (cfg.imageSide === 'left') ? P1 : P2;
-        const textBuffers = (cfg.imageSide === 'left') ? P2 : P1;
-        const imagePane = imageBuffers[active] || null;
-        const textPane = textBuffers[active] || null;
-
-        if (textPane && textPane.__renderPromise && typeof textPane.__renderPromise.then === 'function') {
-          try {
-            await textPane.__renderPromise;
-          } catch (err) {
-            console.warn("Erreur de rendu lors de l'export:", err);
-          }
-        }
-
-        await convertInlineImages(textPane, convertUrlToDataUri);
-
-        const stageComputed = window.getComputedStyle(stage);
-        const slideClone = document.createElement('div');
-        slideClone.className = 'slide';
-        if (i === 0) slideClone.classList.add('active');
-        slideClone.dataset.index = String(i);
-        slideClone.dataset.invert = invertFlags[i] ? 'true' : 'false';
-        slideClone.dataset.fold = foldFlags[i] ? 'true' : 'false';
-
-        slideClone.style.width = '100%';
-        slideClone.style.height = '100%';
-        slideClone.style.display = stageComputed.getPropertyValue('display') || 'grid';
-        const gridCols = stageComputed.getPropertyValue('grid-template-columns');
-        if (gridCols) slideClone.style.gridTemplateColumns = gridCols;
-        const gridRows = stageComputed.getPropertyValue('grid-template-rows');
-        if (gridRows) slideClone.style.gridTemplateRows = gridRows;
-        const alignItems = stageComputed.getPropertyValue('align-items');
-        if (alignItems) slideClone.style.alignItems = alignItems;
-        const justifyItems = stageComputed.getPropertyValue('justify-items');
-        if (justifyItems) slideClone.style.justifyItems = justifyItems;
-        const gap = stageComputed.getPropertyValue('gap');
-        if (gap) slideClone.style.gap = gap;
-        const padding = stageComputed.getPropertyValue('padding');
-        if (padding) slideClone.style.padding = padding;
-
-        let tagsCloneForSlide = null;
-
-        Array.from(stage.children).forEach((paneEl) => {
-          if (paneEl === tagsLayer) return;
-          const paneClone = cloneNodeWithInlineStyles(paneEl, { removeIds: true });
-          if (!paneClone) return;
-          paneClone.innerHTML = '';
-
-          const paneBuffers = Array.from(paneEl.children);
-          const activeBuffer = paneBuffers[active];
-          if (activeBuffer) {
-            const bufferClone = cloneNodeWithInlineStyles(activeBuffer, { removeIds: true });
-            if (bufferClone && bufferClone.classList && bufferClone.classList.contains('text-pane')) {
-              tagsCloneForSlide = createTagsCloneForSlide(slidesForExport[i], textPane, cloneNodeWithInlineStyles);
-            }
-            if (bufferClone) paneClone.appendChild(bufferClone);
-          }
-
-          slideClone.appendChild(paneClone);
+      for (let i = 0; i < slidesWithDataUri.length; i++) {
+        // Use the show function to render the slide in the live DOM
+        // show(i, 0) will update the stage with the current slide
+        // We need to wait for the rendering to complete.
+        await new Promise(resolve => {
+          show(i, 0); // Render the slide
+          // Wait for a short period to allow DOM updates and transitions to settle
+          setTimeout(resolve, cfg.speed + 100); // cfg.speed is the transition speed
         });
 
-        if (tagsCloneForSlide) {
-          slideClone.appendChild(tagsCloneForSlide);
-        }
-
-        slidesHtml.push(slideClone.outerHTML);
+        // Capture the outerHTML of the stage and inline its styles
+        const capturedStageHtml = inlineAllStyles(stage);
+        slidesHtml.push(capturedStageHtml);
       }
 
+      // Restore UI visibility
+      document.body.classList.remove('hide-ui');
+
+      const initialSlide = slidesWithDataUri[0] || {};
       const googleFontsLink = cfg.googleFonts && cfg.googleFonts.length
         ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${cfg.googleFonts.map(f => 'family='+f.trim().replace(/\s+/g,'+')).join('&')}&display=swap">`
         : '';
 
-      const dynamicStyles = `
-        :root {
-          --bg: ${cfg.background};
-          --text: ${cfg.textColor};
-          --speed: ${cfg.speed}ms;
-          --easing: ${cfg.easing === 'linear' ? 'linear' : 'cubic-bezier(0.16,1,0.3,1)'};
-        }
-      `;
-
-      const staticCss = `
-        html, body { height: 100%; margin: 0; overflow: hidden; }
-        body { background: var(--bg); color: var(--text); font-family: ${cfg.bodyFont}; transition: background-color var(--speed) var(--easing), color var(--speed) var(--easing); }
-        #stage { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
-        .slide { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity calc(var(--speed) / 2) var(--easing); }
-        .slide.active { opacity: 1; pointer-events: auto; z-index: 1; }
-        #brandLogo { position: fixed; z-index: 200; pointer-events: none; }
-        #blackout, #whiteout { position: fixed; inset: 0; pointer-events: none; z-index: 300; opacity: 0; transition: opacity 300ms ease; }
-        #blackout { background: #000; }
-        #whiteout { background: #fff; }
-        body.cover-black #blackout { opacity: 1; }
-        body.cover-white #whiteout { opacity: 1; }
-        body.is-fullscreen #brandLogo { display: block !important; }
-        #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 180; }
-        #foldImage { position: fixed; bottom: 0; right: 0; pointer-events: none; z-index: 150; height: 100vh; width: auto; transition: opacity var(--speed) var(--easing); mix-blend-mode: multiply; }
-      `;
-
-      const foldOpacity = clamp(cfg.foldImageOpacity, 0, 1);
-      const vignetteStyle = cfg.vignette
-        ? `radial-gradient(ellipse at center, rgba(0,0,0,0) ${Math.round((1-cfg.vignetteStrength)*100)}%, rgba(0,0,0,${cfg.vignetteStrength}) 100%)`
-        : 'none';
-      const foldInlineStyle = foldDataUri
-        ? `${foldFlags[0] ? 'display: block;' : 'display: none;'} opacity: ${foldFlags[0] ? foldOpacity : 0};`
-        : '';
-
-      const interactivityScript = `
-        (function(){
-          const slides = Array.from(document.querySelectorAll('.slide'));
-          const slideInvert = ${JSON.stringify(invertFlags)};
-          const foldStates = ${JSON.stringify(foldFlags)};
-          const colors = { bg: '${cfg.background}', text: '${cfg.textColor}' };
-          const foldImage = document.getElementById('foldImage');
-          const foldOpacity = ${clamp(cfg.foldImageOpacity, 0, 1)};
-          let idx = 0;
-
-          function applySlideTheme(i) {
-            const invert = slideInvert[i];
-            document.body.style.background = invert ? colors.text : colors.bg;
-            document.body.style.color = invert ? colors.bg : colors.text;
-            if (foldImage) {
-              const visible = foldStates[i];
-              foldImage.style.display = visible ? 'block' : 'none';
-              foldImage.style.opacity = visible ? String(foldOpacity) : '0';
-            }
-          }
-
-          function show(i) {
-            if (i < 0 || i >= slides.length || i === idx) return;
-            const current = slides[idx];
-            const next = slides[i];
-            if (current) current.classList.remove('active');
-            if (next) next.classList.add('active');
-            applySlideTheme(i);
-            idx = i;
-          }
-
-          function toggleBlack(){ document.body.classList.toggle('cover-black'); document.body.classList.remove('cover-white'); }
-          function toggleWhite(){ document.body.classList.toggle('cover-white'); document.body.classList.remove('cover-black'); }
-          function clearCovers(){ document.body.classList.remove('cover-black','cover-white'); }
-          async function toggleFullscreen(){
-            try {
-              if (document.fullscreenElement) await document.exitFullscreen();
-              else await document.documentElement.requestFullscreen();
-            } catch(e) { console.warn('Fullscreen error', e); }
-          }
-
-          document.addEventListener('keydown', e => {
-            const tag = (e.target && e.target.tagName || '').toUpperCase();
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-            const key = e.key.toLowerCase();
-            if (key === 'arrowright' || key === 'pagedown' || key === ' ') { e.preventDefault(); show(idx + 1); }
-            else if (key === 'arrowleft' || key === 'pageup') { e.preventDefault(); show(idx - 1); }
-            else if (key === 'b') toggleBlack();
-            else if (key === 'w') toggleWhite();
-            else if (key === 'escape') clearCovers();
-            else if (key === 'f') toggleFullscreen();
-          });
-
-          document.addEventListener('click', e => {
-            if (e.clientX < window.innerWidth / 3) show(idx - 1);
-            else if (e.clientX > window.innerWidth * 2 / 3) show(idx + 1);
-          });
-
-          if (slides[0]) {
-            slides[0].classList.add('active');
-            applySlideTheme(0);
-          }
-        })();
-      `;
-
-      const logoInlineStyle = logoDataUri
-        ? `${getLogoPositionStyle(cfg)} width: ${(cfg.logoSize || 120)}px; height: auto; opacity: ${cfg.logoOpacity}; border-radius: ${(cfg.logoRadius || 0)}px; ${cfg.logoShadow ? 'filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));' : 'filter: none;'}`
-        : '';
-
       const finalHtml = `
         <!DOCTYPE html>
-
         <html lang="fr">
-
         <head>
-
           <meta charset="UTF-8">
-
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
           <title>Présentation</title>
-
           ${googleFontsLink}
-
           <style>
-
-            ${dynamicStyles}
-
-            ${staticCss}
-
+            ${appStylesCss} /* Embed app/styles.css directly */
           </style>
-
         </head>
-
         <body>
-
-          <div id="stage">
-
-            ${slidesHtml.join('\n')}
-
-          </div>
-
-          ${logoDataUri ? `<img id="brandLogo" src="${logoDataUri}" style="${logoInlineStyle}" alt="Logo">` : ''}
-
-          <div id="vignette" style="background: ${vignetteStyle};"></div>
-
-          ${foldDataUri ? `<img id="foldImage" src="${foldDataUri}" style="${foldInlineStyle}" alt="Fold">` : ''}
-
+          ${slidesHtml.join(' \n')} /* Each slide is now a fully styled HTML block */
           <div id="blackout"></div>
-
           <div id="whiteout"></div>
-
           <script>
-
             ${interactivityScript}
-
           </script>
-
         </body>
-
         </html>
-
       `;
 
       const blob = new Blob([finalHtml.trim()], { type: 'text/html' });
@@ -1319,22 +1031,14 @@ function readPanelToConfig(){
       a.href = URL.createObjectURL(blob);
       a.download = 'presentation.html';
       a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 500);
+      setTimeout(()=>URL.revokeObjectURL(a.href), 500);
 
       alert('Téléchargement terminé ! Le fichier HTML est entièrement autonome.');
+
     } catch (error) {
-      console.error('Erreur lors de la création du fichier de présentation :', error);
-      alert('Une erreur est survenue lors de la préparation du téléchargement. Veuillez vérifier la console pour plus de détails.');
-    } finally {
-      if (replacedSlides) {
-        await waitUntil(() => !busy);
-        slides = originalSlides;
-        if (originalSlides && originalSlides.length) {
-          show(Math.min(originalIdx, originalSlides.length - 1), 0);
-        }
-      }
+      console.error("Erreur lors de la création du fichier de présentation :", error);
+      alert("Une erreur est survenue lors de la préparation du téléchargement. Veuillez vérifier la console pour plus de détails.");
     }
   }
-
 
 })();
