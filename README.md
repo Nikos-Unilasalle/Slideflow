@@ -53,17 +53,38 @@ Le contenu de votre présentation se trouve dans le fichier `presentation/presen
 -   **Contenu** : Vous pouvez utiliser la syntaxe Markdown standard pour formater votre texte (titres, listes, gras, italique, etc.).
     -   `# Mon Titre` : Titre de la diapositive.
     -   `## Mon sous-titre` : Sous-titre de la diapositive.
--   **Images de fond** : Pour ajouter une image de fond à une diapositive, utilisez le "frontmatter" YAML en début de diapositive :
+-   **Images et Vidéos de fond** : Pour ajouter une image ou une vidéo de fond à une diapositive, utilisez le "frontmatter" YAML en début de diapositive :
     ```yaml
     ---
+    # Pour une image
     image: nom_de_votre_image.png
+    # Pour une vidéo
+    video: nom_de_votre_video.mp4
     ---
     ```
+    Les vidéos seront lues automatiquement, sans son et sans répétition.
 -   **Images dans le contenu** : Pour insérer une image directement dans votre texte, la syntaxe a été simplifiée. Utilisez simplement des crochets :
     ```markdown
     Ceci est un texte avec une image : [mon_image.jpg]
     ```
--   **Dossier des images** : Toutes vos images (de fond ou de contenu) doivent être placées dans le dossier `presentation/img/`.
+-   **Dossier des médias** : Toutes vos images et vidéos (de fond ou de contenu) doivent être placées dans le dossier `presentation/img/`.
+-   **Transitions** : Par défaut, la transition entre les diapositivas est un glissement. Vous pouvez choisir un fondu au noir pour une diapositive spécifique en ajoutant `transition: fade` au frontmatter :
+    ```yaml
+    ---
+    image: votre_image.png
+    transition: fade
+    ---
+    ```
+-   **Tags et Mots-clés** : Vous pouvez ajouter des "tags" (étiquettes) à une diapositive via le frontmatter. Ils seront affichés en bas de la diapositive.
+    ```yaml
+    ---
+    tags: Design, UX, Frontend
+    ---
+    ```
+    Vous pouvez également utiliser une syntaxe spéciale dans le corps du texte pour mettre en évidence des mots-clés avec un style similaire :
+    ```markdown
+    Un texte sur le {Design} et la {Créativité}.
+    ```
 
 ### Interface Utilisateur (HUD)
 
